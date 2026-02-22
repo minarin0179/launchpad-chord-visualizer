@@ -194,11 +194,11 @@ function buildGridDOM() {
       el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
       el.onpointerdown = (e) => {
         e.preventDefault();
-        playNote(pad.semitone);
+        startNote(pad.semitone, 80);
         el.classList.add('pressed');
       };
-      el.onpointerup = () => el.classList.remove('pressed');
-      el.onpointerleave = () => el.classList.remove('pressed');
+      el.onpointerup = () => { stopNote(pad.semitone); el.classList.remove('pressed'); };
+      el.onpointerleave = () => { stopNote(pad.semitone); el.classList.remove('pressed'); };
       gridEl.appendChild(el);
       padEls[padIdx] = el;
     }
@@ -267,12 +267,14 @@ function rebuildPads() {
     if (padEls[idx]) {
       padEls[idx].dataset.note = NOTE_NAMES[pad.pitchClass];
       padEls[idx].title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
-      // Rebind click with new semitone
+      // Rebind events with new semitone
       padEls[idx].onpointerdown = (e) => {
         e.preventDefault();
-        playNote(pad.semitone);
+        startNote(pad.semitone, 80);
         padEls[idx].classList.add('pressed');
       };
+      padEls[idx].onpointerup = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); };
+      padEls[idx].onpointerleave = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); };
     }
   });
   updateBaseNoteDisplay();
@@ -627,17 +629,22 @@ document.getElementById('volume').oninput = function() {
   document.getElementById('volume-label').textContent = this.value + '%';
 };
 
-function playNote(midiNote, velocity) {
+// semitone → { osc1, osc2, gain, ctx }
+const activeNotes = new Map();
+
+function startNote(midiNote, velocity = 64) {
+  stopNote(midiNote); // retrigger: stop existing
+
   const ctx = getAudioCtx();
-  const vol = getVolume() * (velocity !== undefined ? velocity / 127 : 1);
+  const vol = getVolume() * (velocity / 127);
   if (vol <= 0) return;
 
   const freq = midiNoteToFreq(midiNote);
   const now = ctx.currentTime;
 
-  const osc = ctx.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(freq, now);
+  const osc1 = ctx.createOscillator();
+  osc1.type = 'triangle';
+  osc1.frequency.setValueAtTime(freq, now);
 
   const osc2 = ctx.createOscillator();
   osc2.type = 'sine';
@@ -646,20 +653,39 @@ function playNote(midiNote, velocity) {
 
   const gain = ctx.createGain();
   const peakVol = vol * 0.25;
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(peakVol, now + 0.01);
-  gain.gain.linearRampToValueAtTime(peakVol * 0.7, now + 0.08);
-  gain.gain.linearRampToValueAtTime(peakVol * 0.5, now + 0.3);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+  const sustainVol = peakVol * 0.5;
+  // velocity が高いほどアタックが速い: 127→5ms, 1→50ms
+  const attackTime = 0.005 + (1 - velocity / 127) * 0.045;
 
-  osc.connect(gain);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(peakVol, now + attackTime);
+  gain.gain.linearRampToValueAtTime(sustainVol, now + attackTime + 0.07);
+  // リリースは stopNote() で行う
+
+  osc1.connect(gain);
   osc2.connect(gain);
   gain.connect(ctx.destination);
 
-  osc.start(now);
+  osc1.start(now);
   osc2.start(now);
-  osc.stop(now + 1.3);
-  osc2.stop(now + 1.3);
+
+  activeNotes.set(midiNote, { osc1, osc2, gain, ctx });
+}
+
+function stopNote(midiNote) {
+  const note = activeNotes.get(midiNote);
+  if (!note) return;
+  activeNotes.delete(midiNote);
+
+  const { osc1, osc2, gain, ctx } = note;
+  const releaseTime = 0.8;
+  const t = ctx.currentTime;
+
+  gain.gain.cancelScheduledValues(t);
+  gain.gain.setValueAtTime(gain.gain.value, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + releaseTime);
+  osc1.stop(t + releaseTime);
+  osc2.stop(t + releaseTime);
 }
 
 // =====================
@@ -703,6 +729,19 @@ function setupMIDIInput(access) {
         return;
       }
 
+      // --- Note Off ---
+      if ((status & 0xF0) === 0x80 || ((status & 0xF0) === 0x90 && data2 === 0)) {
+        const semitone = getLaunchpadSemitone(data1);
+        if (semitone !== undefined) {
+          stopNote(semitone);
+          const padIdx = pads.findIndex(p => p.launchpadNote === data1);
+          if (padIdx >= 0 && padEls[padIdx]) {
+            padEls[padIdx].classList.remove('pressed');
+          }
+        }
+        return;
+      }
+
       // --- Note On ---
       if ((status & 0xF0) === 0x90 && data2 > 0) {
         // Right column as Note (fallback — some firmware versions)
@@ -723,11 +762,10 @@ function setupMIDIInput(access) {
           const noteName = NOTE_NAMES[((semitone % 12) + 12) % 12];
           const octave = Math.floor(semitone / 12) - 1;
           log(`Pad IN: note=${data1} → ${noteName}${octave} vel=${data2}`, 'in');
-          playNote(semitone, data2);
+          startNote(semitone, data2);
           const padIdx = pads.findIndex(p => p.launchpadNote === data1);
           if (padIdx >= 0 && padEls[padIdx]) {
             padEls[padIdx].classList.add('pressed');
-            setTimeout(() => padEls[padIdx].classList.remove('pressed'), 150);
           }
         }
         return;
