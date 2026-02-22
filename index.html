@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Launchpad X - コード練習</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 { margin-bottom: 20px; color: #00d4ff; }
+
+    #status {
+      padding: 10px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    #status.disconnected { background: #ff4444; color: white; }
+    #status.connected { background: #44ff44; color: black; }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: transform 0.1s;
+    }
+    button:hover { transform: scale(1.05); }
+    button:active { transform: scale(0.95); }
+
+    #connectBtn { background: #00d4ff; color: black; }
+    #programmerBtn { background: #ff9800; color: black; }
+    #clearBtn { background: #ff4444; color: white; }
+    .color-btn { background: #6c5ce7; color: white; min-width: 80px; }
+    .color-btn.active { outline: 3px solid #00d4ff; }
+
+    .chord-section {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chord-section select, .chord-section button {
+      font-size: 16px;
+      padding: 10px 16px;
+    }
+    #chordBtn { background: #44ff44; color: black; }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(9, 50px);
+      grid-template-rows: repeat(9, 50px);
+      gap: 4px;
+      margin-bottom: 20px;
+    }
+    .pad {
+      width: 50px;
+      height: 50px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #2a2a4a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #888;
+      transition: background 0.1s;
+    }
+    .pad:hover { border-color: #00d4ff; }
+    .pad.lit { background: #44ff44; color: black; font-weight: bold; }
+    .pad.top-row { border-radius: 50%; }
+    .pad.hidden { visibility: hidden; }
+
+    #log {
+      width: 100%;
+      max-width: 600px;
+      height: 150px;
+      background: #0a0a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .log-entry { margin-bottom: 2px; color: #888; }
+  </style>
+</head>
+<body>
+  <h1>Launchpad X コード練習</h1>
+
+  <div id="status" class="disconnected">未接続</div>
+
+  <div class="controls">
+    <button id="connectBtn" onclick="connectMIDI()">MIDI接続</button>
+    <button id="programmerBtn" onclick="enterProgrammerMode()">Programmerモード</button>
+    <button id="clearBtn" onclick="clearAllPads()">全消灯</button>
+  </div>
+
+  <div class="chord-section">
+    <select id="rootNote">
+      <option value="0">C</option>
+      <option value="1">C#/Db</option>
+      <option value="2">D</option>
+      <option value="3">D#/Eb</option>
+      <option value="4">E</option>
+      <option value="5">F</option>
+      <option value="6">F#/Gb</option>
+      <option value="7">G</option>
+      <option value="8">G#/Ab</option>
+      <option value="9">A</option>
+      <option value="10">A#/Bb</option>
+      <option value="11">B</option>
+    </select>
+    <select id="chordType">
+      <option value="major">Major</option>
+      <option value="minor">minor</option>
+      <option value="7">7th</option>
+      <option value="m7">m7</option>
+      <option value="maj7">Maj7</option>
+      <option value="dim">dim</option>
+      <option value="aug">aug</option>
+      <option value="sus4">sus4</option>
+      <option value="sus2">sus2</option>
+    </select>
+    <button id="chordBtn" onclick="lightChord()">光らせる</button>
+  </div>
+
+  <div class="grid-container" id="grid"></div>
+
+  <div id="log"></div>
+
+  <script>
+    // --- MIDI State ---
+    let midiOutput = null;
+    let midiInput = null;
+
+    // --- Launchpad X Note Layout (Programmer Mode) ---
+    // Row 9 (top): CC 91-98 (top row buttons)
+    // Row 8-1: note numbers = row*10 + col (81-88, 71-78, ..., 11-18)
+    // Right column: not used in standard 8x8
+
+    // Note names for display
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+    // Chord intervals (semitones from root)
+    const CHORD_INTERVALS = {
+      major:  [0, 4, 7],
+      minor:  [0, 3, 7],
+      '7':    [0, 4, 7, 10],
+      m7:     [0, 3, 7, 10],
+      maj7:   [0, 4, 7, 11],
+      dim:    [0, 3, 6],
+      aug:    [0, 4, 8],
+      sus4:   [0, 5, 7],
+      sus2:   [0, 2, 7],
+    };
+
+    // Launchpad X color velocity values
+    const COLOR_GREEN = 21;
+    const COLOR_OFF = 0;
+
+    // --- Launchpad X pad-to-MIDI-note mapping ---
+    // Programmer mode: 8x8 grid, note = row*10 + col
+    // Row 1 (bottom) starts at note 36 in chromatic layout
+    // But in Programmer mode, the note numbers are positional (11-88)
+    // We need to map each pad to its actual musical note
+
+    // Launchpad X default Note layout (Chromatic mode via Programmer mode):
+    // Each row shifts by 5 semitones (perfect 4th) from bottom to top
+    // Bottom-left (pad 11) = C1 (MIDI note 36)
+    // Layout: each row +5 semitones, each column +1 semitone
+    function padToMidiNote(row, col) {
+      // row: 1-8 (bottom to top), col: 1-8 (left to right)
+      // Default chromatic layout: base note 36 (C1), +5 per row, +1 per col
+      return 36 + (row - 1) * 5 + (col - 1);
+    }
+
+    function midiNoteToPitchClass(midiNote) {
+      return ((midiNote % 12) + 12) % 12;
+    }
+
+    // --- Build Visual Grid ---
+    function buildGrid() {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+
+      // Top row (row 9) - control buttons (CC 91-99)
+      for (let col = 0; col <= 8; col++) {
+        const pad = document.createElement('div');
+        pad.classList.add('pad', 'top-row');
+        if (col === 0) {
+          pad.classList.add('hidden');
+        } else {
+          pad.textContent = `CC${90 + col}`;
+          pad.dataset.cc = 90 + col;
+        }
+        grid.appendChild(pad);
+      }
+
+      // Main 8x8 grid (rows 8 down to 1)
+      for (let row = 8; row >= 1; row--) {
+        // Right column button (not in 8x8 but part of layout)
+        // Actually Launchpad has right column too, but let's keep simple
+        for (let col = 0; col <= 8; col++) {
+          const pad = document.createElement('div');
+          pad.classList.add('pad');
+          if (col === 0) {
+            // Left side - row label
+            pad.classList.add('hidden');
+            grid.appendChild(pad);
+            continue;
+          }
+          const noteNum = row * 10 + col;
+          const musicalNote = padToMidiNote(row, col);
+          const noteName = NOTE_NAMES[midiNoteToPitchClass(musicalNote)];
+          pad.textContent = noteName;
+          pad.dataset.note = noteNum;
+          pad.dataset.musicalNote = musicalNote;
+          pad.dataset.row = row;
+          pad.dataset.col = col;
+          pad.onclick = () => togglePad(pad, noteNum);
+          grid.appendChild(pad);
+        }
+      }
+    }
+
+    // --- MIDI Connection ---
+    async function connectMIDI() {
+      try {
+        log('MIDI接続を要求中...');
+        const access = await navigator.requestMIDIAccess({ sysex: true });
+
+        // Find Launchpad X
+        for (const output of access.outputs.values()) {
+          log(`Output発見: ${output.name}`);
+          if (output.name.includes('Launchpad') || output.name.includes('LPX')) {
+            midiOutput = output;
+            log(`✓ Output接続: ${output.name}`);
+          }
+        }
+        for (const input of access.inputs.values()) {
+          log(`Input発見: ${input.name}`);
+          if (input.name.includes('Launchpad') || input.name.includes('LPX')) {
+            midiInput = input;
+            midiInput.onmidimessage = onMIDIMessage;
+            log(`✓ Input接続: ${input.name}`);
+          }
+        }
+
+        if (midiOutput) {
+          const status = document.getElementById('status');
+          status.textContent = `接続済み: ${midiOutput.name}`;
+          status.className = 'connected';
+        } else {
+          log('⚠ Launchpad Xが見つかりません。接続を確認してください。');
+          // List all available devices
+          log('利用可能なMIDIデバイス:');
+          for (const output of access.outputs.values()) {
+            log(`  - ${output.name}`);
+          }
+        }
+      } catch (e) {
+        log(`✗ MIDI接続エラー: ${e.message}`);
+      }
+    }
+
+    // --- Enter Programmer Mode ---
+    function enterProgrammerMode() {
+      if (!midiOutput) { log('⚠ まずMIDI接続してください'); return; }
+      // SysEx to enter Programmer mode
+      // F0 00 20 29 02 0C 0E 01 F7
+      const sysex = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7];
+      midiOutput.send(sysex);
+      log('✓ Programmerモードに切り替えました');
+    }
+
+    // --- Light a single pad ---
+    function lightPad(noteNumber, color) {
+      if (!midiOutput) return;
+      // Note On, channel 1: 0x90, note, velocity(color)
+      midiOutput.send([0x90, noteNumber, color]);
+    }
+
+    // --- Toggle pad on click ---
+    function togglePad(padEl, noteNumber) {
+      if (padEl.classList.contains('lit')) {
+        padEl.classList.remove('lit');
+        lightPad(noteNumber, COLOR_OFF);
+      } else {
+        padEl.classList.add('lit');
+        lightPad(noteNumber, COLOR_GREEN);
+      }
+    }
+
+    // --- Clear all pads ---
+    function clearAllPads() {
+      if (!midiOutput) { log('⚠ まずMIDI接続してください'); return; }
+      // Turn off all pads
+      for (let row = 1; row <= 8; row++) {
+        for (let col = 1; col <= 8; col++) {
+          lightPad(row * 10 + col, COLOR_OFF);
+        }
+      }
+      // Clear visual
+      document.querySelectorAll('.pad.lit').forEach(p => p.classList.remove('lit'));
+      log('全パッド消灯');
+    }
+
+    // --- Light chord ---
+    function lightChord() {
+      const root = parseInt(document.getElementById('rootNote').value);
+      const type = document.getElementById('chordType').value;
+      const intervals = CHORD_INTERVALS[type];
+      if (!intervals) return;
+
+      // Clear first
+      clearAllPads();
+
+      // Get pitch classes in the chord
+      const chordPitchClasses = intervals.map(i => (root + i) % 12);
+      const rootName = NOTE_NAMES[root];
+      log(`${rootName} ${type}: ${chordPitchClasses.map(pc => NOTE_NAMES[pc]).join(', ')}`);
+
+      // Light up all pads that match chord pitch classes
+      const pads = document.querySelectorAll('.pad[data-musical-note]');
+      pads.forEach(pad => {
+        const musicalNote = parseInt(pad.dataset.musicalNote);
+        const pitchClass = midiNoteToPitchClass(musicalNote);
+        if (chordPitchClasses.includes(pitchClass)) {
+          const noteNum = parseInt(pad.dataset.note);
+          pad.classList.add('lit');
+          lightPad(noteNum, COLOR_GREEN);
+        }
+      });
+    }
+
+    // --- Handle incoming MIDI ---
+    function onMIDIMessage(event) {
+      const [status, data1, data2] = event.data;
+      if (status === 0x90 && data2 > 0) {
+        log(`Pad押下: note=${data1}, velocity=${data2}`);
+      }
+    }
+
+    // --- Logging ---
+    function log(msg) {
+      const logDiv = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(msg);
+    }
+
+    // --- Init ---
+    buildGrid();
+    log('アプリ起動。「MIDI接続」ボタンを押してください。');
+  </script>
+</body>
+</html>
