@@ -334,6 +334,24 @@
     width: 100px;
     accent-color: var(--accent);
   }
+
+  #log {
+    width: 100%;
+    max-width: 560px;
+    height: 120px;
+    background: #06060c;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    overflow-y: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  #log .log-in  { color: var(--chord-color); }
+  #log .log-out { color: var(--scale-color); }
+  #log .log-err { color: #ff6644; }
 </style>
 </head>
 <body>
@@ -406,6 +424,8 @@
   <div class="legend-item"><div class="legend-dot" style="background:var(--chord-color);color:var(--chord-color)"></div>Chord Tone</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--scale-color);color:var(--scale-color)"></div>Scale Tone</div>
 </div>
+
+<div id="log"></div>
 
 <script>
 // =====================
@@ -670,6 +690,20 @@ const COLORS = {
   dim:   [2, 2, 8],
 };
 
+// =====================
+// Event Log
+// =====================
+function log(msg, type) {
+  const logDiv = document.getElementById('log');
+  const entry = document.createElement('div');
+  if (type) entry.className = 'log-' + type;
+  const ts = new Date().toLocaleTimeString();
+  entry.textContent = `[${ts}] ${msg}`;
+  logDiv.appendChild(entry);
+  logDiv.scrollTop = logDiv.scrollHeight;
+  console.log(msg);
+}
+
 async function initMIDI() {
   const statusEl = document.getElementById('midi-status');
   const hintEl = document.getElementById('midi-hint');
@@ -693,6 +727,7 @@ async function initMIDI() {
     statusEl.className = 'disconnected';
     hintEl.textContent = 'ブラウザがMIDIアクセスを拒否しました。アドレスバーの鍵アイコンからMIDI許可を確認してください。';
     hintEl.style.display = '';
+    log('MIDI access denied: ' + e.message, 'err');
   }
 }
 
@@ -743,7 +778,11 @@ function populateDevices(access) {
     hintEl.style.display = 'none';
   }
 
-  console.log(`MIDI outputs found: ${outputCount}`, deviceNames);
+  if (outputCount > 0) {
+    log(`MIDI devices: ${deviceNames.join(', ')}`, 'out');
+  } else {
+    log('No MIDI devices found', 'err');
+  }
   onDeviceSelect();
 }
 
@@ -795,8 +834,8 @@ function onDeviceSelect() {
 
 function setProgrammerMode() {
   if (!state.midiOutput) return;
-  // Launchpad X SysEx: enter Programmer layout (standalone mode = 1)
   state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7]);
+  log('SysEx → Programmer Mode', 'out');
 }
 
 function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
@@ -821,7 +860,12 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
   });
 
   data.push(0xF7);
-  try { state.midiOutput.send(data); } catch(e) { console.warn('MIDI send error', e); }
+  try {
+    state.midiOutput.send(data);
+    log(`SysEx → RGB lighting (${pads.length} pads)`, 'out');
+  } catch(e) {
+    log('MIDI send error: ' + e.message, 'err');
+  }
 }
 
 // Manual send button
@@ -909,6 +953,9 @@ function setupMIDIInput(access) {
       if (status === 0x90 && velocity > 0) {
         const semitone = launchpadToSemitone[note];
         if (semitone !== undefined) {
+          const noteName = NOTE_NAMES[semitone % 12];
+          const octave = Math.floor(semitone / 12) - 1;
+          log(`Pad IN: note=${note} → ${noteName}${octave} vel=${velocity}`, 'in');
           playNote(semitone, velocity);
           const padIdx = pads.findIndex(p => p.launchpadNote === note);
           if (padIdx >= 0 && padEls[padIdx]) {
@@ -924,6 +971,7 @@ function setupMIDIInput(access) {
 // =====================
 // Init
 // =====================
+log('App started');
 initMIDI();
 updateAll();
 </script>
