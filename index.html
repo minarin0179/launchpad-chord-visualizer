@@ -1,383 +1,755 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Launchpad X - コード練習</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-    h1 { margin-bottom: 20px; color: #00d4ff; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launchpad X — Chord Visualizer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
 
-    #status {
-      padding: 10px 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-weight: bold;
-    }
-    #status.disconnected { background: #ff4444; color: white; }
-    #status.connected { background: #44ff44; color: black; }
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --root-color: #ff4466;
+    --chord-color: #33ddff;
+    --scale-color: #44ff99;
+    --dim-color: #1a1a2a;
+    --text: #e0e0f0;
+    --text-muted: #555577;
+    --accent: #ff4466;
+  }
 
-    .controls {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: bold;
-      transition: transform 0.1s;
-    }
-    button:hover { transform: scale(1.05); }
-    button:active { transform: scale(0.95); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    #connectBtn { background: #00d4ff; color: black; }
-    #programmerBtn { background: #ff9800; color: black; }
-    #clearBtn { background: #ff4444; color: white; }
-    .color-btn { background: #6c5ce7; color: white; min-width: 80px; }
-    .color-btn.active { outline: 3px solid #00d4ff; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    gap: 24px;
+  }
 
-    .chord-section {
-      margin-bottom: 20px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .chord-section select, .chord-section button {
-      font-size: 16px;
-      padding: 10px 16px;
-    }
-    #chordBtn { background: #44ff44; color: black; }
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 100;
+  }
 
-    .grid-container {
-      display: grid;
-      grid-template-columns: repeat(9, 50px);
-      grid-template-rows: repeat(9, 50px);
-      gap: 4px;
-      margin-bottom: 20px;
-    }
-    .pad {
-      width: 50px;
-      height: 50px;
-      border-radius: 6px;
-      border: 1px solid #333;
-      background: #2a2a4a;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: #888;
-      transition: background 0.1s;
-    }
-    .pad:hover { border-color: #00d4ff; }
-    .pad.lit { background: #44ff44; color: black; font-weight: bold; }
-    .pad.top-row { border-radius: 50%; }
-    .pad.hidden { visibility: hidden; }
+  header { text-align: center; letter-spacing: 0.15em; }
+  header h1 {
+    font-size: clamp(1.1rem, 3vw, 1.4rem);
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  header p {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
 
-    #log {
-      width: 100%;
-      max-width: 600px;
-      height: 150px;
-      background: #0a0a1a;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 10px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 12px;
-    }
-    .log-entry { margin-bottom: 2px; color: #888; }
-  </style>
+  /* MIDI status */
+  #midi-status {
+    font-size: 0.65rem;
+    padding: 6px 14px;
+    border-radius: 2px;
+    border: 1px solid;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.3s;
+  }
+  #midi-status.connected { border-color: var(--scale-color); color: var(--scale-color); }
+  #midi-status.disconnected { border-color: #ff6644; color: #ff6644; }
+  #midi-status.searching { border-color: var(--text-muted); color: var(--text-muted); }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .control-group label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+  }
+  .control-group .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--text); }
+  .btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    font-weight: 700;
+  }
+
+  /* Toggle buttons */
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .toggle-btn {
+    font-size: 0.65rem;
+    padding: 5px 12px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .toggle-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.15s; }
+  .toggle-btn.active .dot { background: currentColor; }
+  .toggle-btn.active { color: var(--text); border-color: currentColor; }
+  .toggle-btn.t-scale.active { color: var(--scale-color); }
+  .toggle-btn.t-dim.active { color: #8888aa; }
+  .toggle-btn.t-inversion.active { color: #ffaa33; }
+
+  /* Inversion selector */
+  #inversion-row { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* Grid wrapper */
+  .grid-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  #scale-key-label {
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+    min-height: 1em;
+  }
+
+  /* Launchpad grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 4px;
+    width: 100%;
+    aspect-ratio: 1;
+    background: #0c0c14;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 40px rgba(255,68,102,0.05);
+  }
+
+  .pad {
+    border-radius: 3px;
+    aspect-ratio: 1;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.12s, box-shadow 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .pad::after {
+    content: attr(data-note);
+    font-size: clamp(0.4rem, 1.2vw, 0.6rem);
+    color: rgba(255,255,255,0.25);
+    font-family: 'Space Mono', monospace;
+    pointer-events: none;
+    line-height: 1;
+  }
+  .pad.dim {
+    background: var(--dim-color) !important;
+    box-shadow: none !important;
+  }
+  .pad.root {
+    background: var(--root-color);
+    box-shadow: 0 0 12px var(--root-color), 0 0 4px var(--root-color);
+  }
+  .pad.root::after { color: rgba(0,0,0,0.6); }
+  .pad.chord {
+    background: var(--chord-color);
+    box-shadow: 0 0 10px var(--chord-color);
+  }
+  .pad.chord::after { color: rgba(0,0,0,0.5); }
+  .pad.scale-only {
+    background: var(--scale-color);
+    box-shadow: 0 0 8px var(--scale-color);
+  }
+  .pad.scale-only::after { color: rgba(0,0,0,0.4); }
+  .pad.off {
+    background: #1a1a28;
+  }
+
+  /* Current chord display */
+  #chord-display {
+    text-align: center;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  #chord-name {
+    font-size: clamp(1.4rem, 5vw, 2rem);
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    transition: all 0.2s;
+  }
+  #chord-notes {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+  }
+  #chord-interval {
+    font-size: 0.58rem;
+    color: #444466;
+    letter-spacing: 0.1em;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    box-shadow: 0 0 6px currentColor;
+  }
+
+  /* MIDI device row */
+  #device-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 6px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    max-width: 260px;
+  }
+
+  .send-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 8px 20px;
+    cursor: pointer;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.15s;
+  }
+  .send-btn:hover { background: var(--accent); color: #000; }
+  .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .send-btn:disabled:hover { background: transparent; color: var(--accent); }
+
+  .midi-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+</style>
 </head>
 <body>
-  <h1>Launchpad X コード練習</h1>
 
-  <div id="status" class="disconnected">未接続</div>
+<header>
+  <h1>Launchpad X // Chord Visualizer</h1>
+  <p>コード名を選んでパッドを光らせる</p>
+</header>
 
-  <div class="controls">
-    <button id="connectBtn" onclick="connectMIDI()">MIDI接続</button>
-    <button id="programmerBtn" onclick="enterProgrammerMode()">Programmerモード</button>
-    <button id="clearBtn" onclick="clearAllPads()">全消灯</button>
+<div id="midi-status" class="searching">MIDI を検索中...</div>
+
+<div class="midi-row">
+  <select id="device-select"><option value="">-- MIDI デバイスなし --</option></select>
+  <button class="send-btn" id="send-btn" disabled>SEND</button>
+  <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Root</label>
+    <div class="btn-row" id="root-buttons"></div>
   </div>
-
-  <div class="chord-section">
-    <select id="rootNote">
-      <option value="0">C</option>
-      <option value="1">C#/Db</option>
-      <option value="2">D</option>
-      <option value="3">D#/Eb</option>
-      <option value="4">E</option>
-      <option value="5">F</option>
-      <option value="6">F#/Gb</option>
-      <option value="7">G</option>
-      <option value="8">G#/Ab</option>
-      <option value="9">A</option>
-      <option value="10">A#/Bb</option>
-      <option value="11">B</option>
-    </select>
-    <select id="chordType">
-      <option value="major">Major</option>
-      <option value="minor">minor</option>
-      <option value="7">7th</option>
-      <option value="m7">m7</option>
-      <option value="maj7">Maj7</option>
-      <option value="dim">dim</option>
-      <option value="aug">aug</option>
-      <option value="sus4">sus4</option>
-      <option value="sus2">sus2</option>
-    </select>
-    <button id="chordBtn" onclick="lightChord()">光らせる</button>
+  <div class="control-group">
+    <label>Chord</label>
+    <div class="btn-row" id="chord-buttons"></div>
   </div>
+  <div class="control-group" id="scale-control">
+    <label>Scale</label>
+    <div class="btn-row" id="scale-buttons"></div>
+  </div>
+  <div class="control-group" id="inversion-control" style="display:none">
+    <label>Inversion</label>
+    <div id="inversion-row"></div>
+  </div>
+</div>
 
-  <div class="grid-container" id="grid"></div>
+<div class="toggle-row">
+  <button class="toggle-btn t-dim" id="toggle-dim">
+    <span class="dot"></span>コードトーン以外を暗く
+  </button>
+  <button class="toggle-btn t-scale active" id="toggle-scale">
+    <span class="dot"></span>スケール表示
+  </button>
+  <button class="toggle-btn t-inversion" id="toggle-inversion">
+    <span class="dot"></span>転回形
+  </button>
+</div>
 
-  <div id="log"></div>
+<div class="grid-wrapper">
+  <div id="scale-key-label"></div>
+  <div class="grid" id="pad-grid"></div>
+</div>
 
-  <script>
-    // --- MIDI State ---
-    let midiOutput = null;
-    let midiInput = null;
+<div id="chord-display">
+  <div id="chord-name">&mdash;</div>
+  <div id="chord-notes"></div>
+  <div id="chord-interval"></div>
+</div>
 
-    // --- Launchpad X Note Layout (Programmer Mode) ---
-    // Row 9 (top): CC 91-98 (top row buttons)
-    // Row 8-1: note numbers = row*10 + col (81-88, 71-78, ..., 11-18)
-    // Right column: not used in standard 8x8
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--root-color);color:var(--root-color)"></div>Root</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--chord-color);color:var(--chord-color)"></div>Chord Tone</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--scale-color);color:var(--scale-color)"></div>Scale Tone</div>
+</div>
 
-    // Note names for display
-    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+<script>
+// =====================
+// Music Theory Data
+// =====================
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-    // Chord intervals (semitones from root)
-    const CHORD_INTERVALS = {
-      major:  [0, 4, 7],
-      minor:  [0, 3, 7],
-      '7':    [0, 4, 7, 10],
-      m7:     [0, 3, 7, 10],
-      maj7:   [0, 4, 7, 11],
-      dim:    [0, 3, 6],
-      aug:    [0, 4, 8],
-      sus4:   [0, 5, 7],
-      sus2:   [0, 2, 7],
-    };
+const CHORD_TYPES = {
+  'maj':   { intervals: [0,4,7],       label: 'Major',    symbol: '' },
+  'min':   { intervals: [0,3,7],       label: 'Minor',    symbol: 'm' },
+  '7':     { intervals: [0,4,7,10],    label: 'Dom 7',    symbol: '7' },
+  'maj7':  { intervals: [0,4,7,11],    label: 'Maj 7',    symbol: 'M7' },
+  'min7':  { intervals: [0,3,7,10],    label: 'Min 7',    symbol: 'm7' },
+  'dim':   { intervals: [0,3,6],       label: 'Dim',      symbol: '°' },
+  'dim7':  { intervals: [0,3,6,9],     label: 'Dim 7',    symbol: '°7' },
+  'aug':   { intervals: [0,4,8],       label: 'Aug',      symbol: '+' },
+  'm7b5':  { intervals: [0,3,6,10],    label: 'Half-Dim', symbol: 'ø7' },
+  'sus2':  { intervals: [0,2,7],       label: 'Sus2',     symbol: 'sus2' },
+  'sus4':  { intervals: [0,5,7],       label: 'Sus4',     symbol: 'sus4' },
+  'add9':  { intervals: [0,4,7,14],    label: 'Add9',     symbol: 'add9' },
+  '9':     { intervals: [0,4,7,10,14], label: 'Dom 9',    symbol: '9' },
+  'maj9':  { intervals: [0,4,7,11,14], label: 'Maj 9',    symbol: 'M9' },
+  'min9':  { intervals: [0,3,7,10,14], label: 'Min 9',    symbol: 'm9' },
+  '6':     { intervals: [0,4,7,9],     label: 'Maj 6',    symbol: '6' },
+  'min6':  { intervals: [0,3,7,9],     label: 'Min 6',    symbol: 'm6' },
+};
 
-    // Launchpad X color velocity values
-    const COLOR_GREEN = 21;
-    const COLOR_OFF = 0;
+const SCALES = {
+  'major':      { intervals: [0,2,4,5,7,9,11], label: 'Major' },
+  'minor':      { intervals: [0,2,3,5,7,8,10], label: 'Nat Minor' },
+  'dorian':     { intervals: [0,2,3,5,7,9,10], label: 'Dorian' },
+  'mixolydian': { intervals: [0,2,4,5,7,9,10], label: 'Mixolydian' },
+  'penta_maj':  { intervals: [0,2,4,7,9],      label: 'Penta Maj' },
+  'penta_min':  { intervals: [0,3,5,7,10],     label: 'Penta Min' },
+  'blues':      { intervals: [0,3,5,6,7,10],   label: 'Blues' },
+};
 
-    // --- Launchpad X pad-to-MIDI-note mapping ---
-    // Programmer mode: 8x8 grid, note = row*10 + col
-    // Row 1 (bottom) starts at note 36 in chromatic layout
-    // But in Programmer mode, the note numbers are positional (11-88)
-    // We need to map each pad to its actual musical note
+const INTERVAL_NAMES = ['R','b2','2','b3','3','4','#4','5','b6','6','b7','7','(8)','b9','9'];
 
-    // Launchpad X default Note layout (Chromatic mode via Programmer mode):
-    // Each row shifts by 5 semitones (perfect 4th) from bottom to top
-    // Bottom-left (pad 11) = C1 (MIDI note 36)
-    // Layout: each row +5 semitones, each column +1 semitone
-    function padToMidiNote(row, col) {
-      // row: 1-8 (bottom to top), col: 1-8 (left to right)
-      // Default chromatic layout: base note 36 (C1), +5 per row, +1 per col
-      return 36 + (row - 1) * 5 + (col - 1);
+// =====================
+// Grid Layout
+// =====================
+// Launchpad X Programmer mode: pad note = (row+1)*10 + (col+1)
+// Musical layout: guitar-style, each row +5 semitones (perfect 4th)
+// Bottom-left = MIDI note 36 (C2)
+const BASE_NOTE = 36;
+const ROW_INTERVAL = 5;
+
+function buildPadData() {
+  const pads = [];
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const semitone = BASE_NOTE + row * ROW_INTERVAL + col;
+      const pitchClass = semitone % 12;
+      const launchpadNote = (row + 1) * 10 + (col + 1);
+      pads.push({ row, col, semitone, pitchClass, launchpadNote });
     }
+  }
+  return pads;
+}
 
-    function midiNoteToPitchClass(midiNote) {
-      return ((midiNote % 12) + 12) % 12;
+const pads = buildPadData();
+
+// =====================
+// State
+// =====================
+const state = {
+  root: 0,
+  chordType: 'maj',
+  inversion: 0,
+  showScale: true,
+  dimOthers: false,
+  showInversion: false,
+  scale: 'major',
+  midiOutput: null,
+  midiAccess: null,
+};
+
+// =====================
+// DOM: Root buttons
+// =====================
+const rootContainer = document.getElementById('root-buttons');
+NOTE_NAMES.forEach((name, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'btn' + (i === 0 ? ' active' : '');
+  btn.textContent = name;
+  btn.onclick = () => { state.root = i; state.inversion = 0; updateAll(); setActive(rootContainer, btn); };
+  rootContainer.appendChild(btn);
+});
+
+// =====================
+// DOM: Chord type buttons
+// =====================
+const chordContainer = document.getElementById('chord-buttons');
+Object.entries(CHORD_TYPES).forEach(([key, val]) => {
+  const btn = document.createElement('button');
+  btn.className = 'btn' + (key === 'maj' ? ' active' : '');
+  btn.textContent = val.label;
+  btn.onclick = () => { state.chordType = key; state.inversion = 0; updateAll(); setActive(chordContainer, btn); };
+  chordContainer.appendChild(btn);
+});
+
+// =====================
+// DOM: Scale buttons
+// =====================
+const scaleContainer = document.getElementById('scale-buttons');
+Object.entries(SCALES).forEach(([key, val]) => {
+  const btn = document.createElement('button');
+  btn.className = 'btn' + (key === 'major' ? ' active' : '');
+  btn.textContent = val.label;
+  btn.onclick = () => { state.scale = key; updateAll(); setActive(scaleContainer, btn); };
+  scaleContainer.appendChild(btn);
+});
+
+function setActive(container, activeBtn) {
+  container.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  activeBtn.classList.add('active');
+}
+
+// =====================
+// DOM: Toggles
+// =====================
+document.getElementById('toggle-dim').onclick = function() {
+  state.dimOthers = !state.dimOthers;
+  this.classList.toggle('active', state.dimOthers);
+  updateAll();
+};
+document.getElementById('toggle-scale').onclick = function() {
+  state.showScale = !state.showScale;
+  this.classList.toggle('active', state.showScale);
+  document.getElementById('scale-control').style.display = state.showScale ? '' : 'none';
+  document.getElementById('scale-key-label').style.display = state.showScale ? '' : 'none';
+  updateAll();
+};
+document.getElementById('toggle-inversion').onclick = function() {
+  state.showInversion = !state.showInversion;
+  this.classList.toggle('active', state.showInversion);
+  document.getElementById('inversion-control').style.display = state.showInversion ? '' : 'none';
+  updateAll();
+};
+
+// =====================
+// DOM: Pad grid
+// =====================
+const gridEl = document.getElementById('pad-grid');
+const padEls = [];
+
+for (let row = 7; row >= 0; row--) {
+  for (let col = 0; col < 8; col++) {
+    const padIdx = row * 8 + col;
+    const pad = pads[padIdx];
+    const el = document.createElement('div');
+    el.className = 'pad off';
+    el.dataset.note = NOTE_NAMES[pad.pitchClass];
+    el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
+    gridEl.appendChild(el);
+    padEls[padIdx] = el;
+  }
+}
+
+// =====================
+// Music Logic
+// =====================
+function getChordPitchClasses() {
+  const intervals = CHORD_TYPES[state.chordType].intervals.map(i => i % 12);
+  const raw = intervals.map(i => (state.root + i) % 12);
+  const inv = state.showInversion ? state.inversion : 0;
+  const inverted = [...raw.slice(inv), ...raw.slice(0, inv)];
+  return { all: raw, inverted };
+}
+
+function getScalePitchClasses() {
+  return SCALES[state.scale].intervals.map(i => (state.root + i) % 12);
+}
+
+function buildInversionButtons() {
+  const row = document.getElementById('inversion-row');
+  row.innerHTML = '';
+  const n = CHORD_TYPES[state.chordType].intervals.length;
+  const labels = ['基本形', '第1転', '第2転', '第3転', '第4転'];
+  for (let i = 0; i < n; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (i === state.inversion ? ' active' : '');
+    btn.textContent = labels[i] || `転${i}`;
+    btn.onclick = () => { state.inversion = i; updateAll(); setActive(row, btn); };
+    row.appendChild(btn);
+  }
+}
+
+// =====================
+// Main Update
+// =====================
+function updateAll() {
+  const maxInv = CHORD_TYPES[state.chordType].intervals.length - 1;
+  if (state.inversion > maxInv) state.inversion = 0;
+  buildInversionButtons();
+
+  const chordPCs = getChordPitchClasses();
+  const scalePCs = getScalePitchClasses();
+  const rootPC = state.root;
+
+  pads.forEach((pad, idx) => {
+    const el = padEls[idx];
+    const pc = pad.pitchClass;
+    const isRoot = pc === rootPC && chordPCs.all.includes(pc);
+    const isChord = chordPCs.all.includes(pc);
+    const isScale = scalePCs.includes(pc);
+
+    el.className = 'pad';
+    if (isRoot) {
+      el.classList.add('root');
+    } else if (isChord) {
+      el.classList.add('chord');
+    } else if (state.showScale && isScale) {
+      el.classList.add('scale-only');
+    } else {
+      el.classList.add(state.dimOthers ? 'dim' : 'off');
     }
+  });
 
-    // --- Build Visual Grid ---
-    function buildGrid() {
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
+  // Chord display
+  const sym = CHORD_TYPES[state.chordType].symbol;
+  const rootName = NOTE_NAMES[state.root];
+  document.getElementById('chord-name').textContent = rootName + sym;
 
-      // Top row (row 9) - control buttons (CC 91-99)
-      for (let col = 0; col <= 8; col++) {
-        const pad = document.createElement('div');
-        pad.classList.add('pad', 'top-row');
-        if (col === 0) {
-          pad.classList.add('hidden');
-        } else {
-          pad.textContent = `CC${90 + col}`;
-          pad.dataset.cc = 90 + col;
-        }
-        grid.appendChild(pad);
-      }
+  const noteNames = chordPCs.inverted.map(pc => NOTE_NAMES[pc]).join('  ');
+  document.getElementById('chord-notes').textContent = noteNames;
 
-      // Main 8x8 grid (rows 8 down to 1)
-      for (let row = 8; row >= 1; row--) {
-        // Right column button (not in 8x8 but part of layout)
-        // Actually Launchpad has right column too, but let's keep simple
-        for (let col = 0; col <= 8; col++) {
-          const pad = document.createElement('div');
-          pad.classList.add('pad');
-          if (col === 0) {
-            // Left side - row label
-            pad.classList.add('hidden');
-            grid.appendChild(pad);
-            continue;
-          }
-          const noteNum = row * 10 + col;
-          const musicalNote = padToMidiNote(row, col);
-          const noteName = NOTE_NAMES[midiNoteToPitchClass(musicalNote)];
-          pad.textContent = noteName;
-          pad.dataset.note = noteNum;
-          pad.dataset.musicalNote = musicalNote;
-          pad.dataset.row = row;
-          pad.dataset.col = col;
-          pad.onclick = () => togglePad(pad, noteNum);
-          grid.appendChild(pad);
-        }
-      }
+  const ints = CHORD_TYPES[state.chordType].intervals;
+  const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`);
+  document.getElementById('chord-interval').textContent = intNames.join(' — ');
+
+  // Scale label
+  if (state.showScale) {
+    document.getElementById('scale-key-label').textContent =
+      `${rootName} ${SCALES[state.scale].label} Scale`;
+  } else {
+    document.getElementById('scale-key-label').textContent = '';
+  }
+
+  // Send to Launchpad
+  sendToLaunchpad(chordPCs.all, scalePCs, rootPC);
+}
+
+// =====================
+// MIDI / Launchpad X
+// =====================
+
+// Launchpad X RGB SysEx colors (0-127)
+const COLORS = {
+  root:  [127, 0, 40],
+  chord: [0, 100, 127],
+  scale: [0, 127, 60],
+  off:   [5, 5, 15],
+  dim:   [2, 2, 8],
+};
+
+async function initMIDI() {
+  const statusEl = document.getElementById('midi-status');
+  if (!navigator.requestMIDIAccess) {
+    statusEl.textContent = 'WebMIDI 非対応 (Chrome推奨)';
+    statusEl.className = 'disconnected';
+    return;
+  }
+  try {
+    const access = await navigator.requestMIDIAccess({ sysex: true });
+    state.midiAccess = access;
+    populateDevices(access);
+    access.onstatechange = () => populateDevices(access);
+    statusEl.textContent = 'WebMIDI Ready';
+    statusEl.className = 'connected';
+  } catch(e) {
+    statusEl.textContent = 'MIDI アクセス拒否';
+    statusEl.className = 'disconnected';
+  }
+}
+
+function populateDevices(access) {
+  const sel = document.getElementById('device-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- デバイスを選択 --</option>';
+  let autoSelected = false;
+
+  for (const [id, output] of access.outputs) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = output.name;
+    sel.appendChild(opt);
+    // Auto-select Launchpad
+    if (!autoSelected && output.name.toLowerCase().includes('launchpad')) {
+      sel.value = id;
+      autoSelected = true;
     }
+  }
+  // Restore previous selection if still available
+  if (!autoSelected && prev) {
+    const prevOpt = sel.querySelector(`option[value="${prev}"]`);
+    if (prevOpt) sel.value = prev;
+  }
+  onDeviceSelect();
+}
 
-    // --- MIDI Connection ---
-    async function connectMIDI() {
-      try {
-        log('MIDI接続を要求中...');
-        const access = await navigator.requestMIDIAccess({ sysex: true });
+document.getElementById('device-select').onchange = onDeviceSelect;
 
-        // Find Launchpad X
-        for (const output of access.outputs.values()) {
-          log(`Output発見: ${output.name}`);
-          if (output.name.includes('Launchpad') || output.name.includes('LPX')) {
-            midiOutput = output;
-            log(`✓ Output接続: ${output.name}`);
-          }
-        }
-        for (const input of access.inputs.values()) {
-          log(`Input発見: ${input.name}`);
-          if (input.name.includes('Launchpad') || input.name.includes('LPX')) {
-            midiInput = input;
-            midiInput.onmidimessage = onMIDIMessage;
-            log(`✓ Input接続: ${input.name}`);
-          }
-        }
+function onDeviceSelect() {
+  const id = document.getElementById('device-select').value;
+  if (id && state.midiAccess) {
+    state.midiOutput = state.midiAccess.outputs.get(id);
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('clear-btn').disabled = false;
+    setProgrammerMode();
+    // Small delay to let Programmer mode take effect before sending
+    setTimeout(() => updateAll(), 100);
+  } else {
+    state.midiOutput = null;
+    document.getElementById('send-btn').disabled = true;
+    document.getElementById('clear-btn').disabled = true;
+  }
+}
 
-        if (midiOutput) {
-          const status = document.getElementById('status');
-          status.textContent = `接続済み: ${midiOutput.name}`;
-          status.className = 'connected';
-        } else {
-          log('⚠ Launchpad Xが見つかりません。接続を確認してください。');
-          // List all available devices
-          log('利用可能なMIDIデバイス:');
-          for (const output of access.outputs.values()) {
-            log(`  - ${output.name}`);
-          }
-        }
-      } catch (e) {
-        log(`✗ MIDI接続エラー: ${e.message}`);
-      }
-    }
+function setProgrammerMode() {
+  if (!state.midiOutput) return;
+  // Launchpad X SysEx: enter Programmer layout (standalone mode = 1)
+  state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7]);
+}
 
-    // --- Enter Programmer Mode ---
-    function enterProgrammerMode() {
-      if (!midiOutput) { log('⚠ まずMIDI接続してください'); return; }
-      // SysEx to enter Programmer mode
-      // F0 00 20 29 02 0C 0E 01 F7
-      const sysex = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7];
-      midiOutput.send(sysex);
-      log('✓ Programmerモードに切り替えました');
-    }
+function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
+  if (!state.midiOutput) return;
 
-    // --- Light a single pad ---
-    function lightPad(noteNumber, color) {
-      if (!midiOutput) return;
-      // Note On, channel 1: 0x90, note, velocity(color)
-      midiOutput.send([0x90, noteNumber, color]);
-    }
+  // SysEx RGB lighting: F0 00 20 29 02 0C 03 [03 pad r g b] ... F7
+  // The '03' before each pad means "RGB mode per LED"
+  const data = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03];
 
-    // --- Toggle pad on click ---
-    function togglePad(padEl, noteNumber) {
-      if (padEl.classList.contains('lit')) {
-        padEl.classList.remove('lit');
-        lightPad(noteNumber, COLOR_OFF);
-      } else {
-        padEl.classList.add('lit');
-        lightPad(noteNumber, COLOR_GREEN);
-      }
-    }
+  pads.forEach(pad => {
+    const pc = pad.pitchClass;
+    const isRoot = pc === rootPC && chordPCs.includes(pc);
+    const isChord = chordPCs.includes(pc);
+    const isScale = scalePCs.includes(pc);
 
-    // --- Clear all pads ---
-    function clearAllPads() {
-      if (!midiOutput) { log('⚠ まずMIDI接続してください'); return; }
-      // Turn off all pads
-      for (let row = 1; row <= 8; row++) {
-        for (let col = 1; col <= 8; col++) {
-          lightPad(row * 10 + col, COLOR_OFF);
-        }
-      }
-      // Clear visual
-      document.querySelectorAll('.pad.lit').forEach(p => p.classList.remove('lit'));
-      log('全パッド消灯');
-    }
+    let color;
+    if (isRoot)                          color = COLORS.root;
+    else if (isChord)                    color = COLORS.chord;
+    else if (state.showScale && isScale) color = COLORS.scale;
+    else                                 color = state.dimOthers ? COLORS.dim : COLORS.off;
 
-    // --- Light chord ---
-    function lightChord() {
-      const root = parseInt(document.getElementById('rootNote').value);
-      const type = document.getElementById('chordType').value;
-      const intervals = CHORD_INTERVALS[type];
-      if (!intervals) return;
+    // Each LED: [type=03, padNote, r, g, b]
+    data.push(0x03, pad.launchpadNote, color[0], color[1], color[2]);
+  });
 
-      // Clear first
-      clearAllPads();
+  data.push(0xF7);
+  try { state.midiOutput.send(data); } catch(e) { console.warn('MIDI send error', e); }
+}
 
-      // Get pitch classes in the chord
-      const chordPitchClasses = intervals.map(i => (root + i) % 12);
-      const rootName = NOTE_NAMES[root];
-      log(`${rootName} ${type}: ${chordPitchClasses.map(pc => NOTE_NAMES[pc]).join(', ')}`);
+// Manual send button
+document.getElementById('send-btn').onclick = () => updateAll();
 
-      // Light up all pads that match chord pitch classes
-      const pads = document.querySelectorAll('.pad[data-musical-note]');
-      pads.forEach(pad => {
-        const musicalNote = parseInt(pad.dataset.musicalNote);
-        const pitchClass = midiNoteToPitchClass(musicalNote);
-        if (chordPitchClasses.includes(pitchClass)) {
-          const noteNum = parseInt(pad.dataset.note);
-          pad.classList.add('lit');
-          lightPad(noteNum, COLOR_GREEN);
-        }
-      });
-    }
+// Clear all LEDs
+document.getElementById('clear-btn').onclick = () => {
+  if (!state.midiOutput) return;
+  const data = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03];
+  pads.forEach(pad => {
+    data.push(0x03, pad.launchpadNote, 0, 0, 0);
+  });
+  data.push(0xF7);
+  try { state.midiOutput.send(data); } catch(e) {}
+};
 
-    // --- Handle incoming MIDI ---
-    function onMIDIMessage(event) {
-      const [status, data1, data2] = event.data;
-      if (status === 0x90 && data2 > 0) {
-        log(`Pad押下: note=${data1}, velocity=${data2}`);
-      }
-    }
-
-    // --- Logging ---
-    function log(msg) {
-      const logDiv = document.getElementById('log');
-      const entry = document.createElement('div');
-      entry.className = 'log-entry';
-      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logDiv.appendChild(entry);
-      logDiv.scrollTop = logDiv.scrollHeight;
-      console.log(msg);
-    }
-
-    // --- Init ---
-    buildGrid();
-    log('アプリ起動。「MIDI接続」ボタンを押してください。');
-  </script>
+// =====================
+// Init
+// =====================
+initMIDI();
+updateAll();
+</script>
 </body>
 </html>
