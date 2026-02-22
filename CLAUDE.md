@@ -110,6 +110,7 @@ const state = {
 | 種別 | 画面CSS | Launchpad RGB |
 |------|---------|---------------|
 | ルート音 | `--root-color` (#ff4466) | [127, 0, 40] |
+| 転回ベース音（`showInversion`=true かつ `inversion`>0 時） | `.pad.bass` (#ffaa33) | [127, 80, 0] |
 | コードトーン（`showChord`=true時） | `--chord-color` (#33ddff) | [0, 100, 127] |
 | スケール音（`showScale`=true時） | `--scale-color` (#44ff99) | [0, 127, 60] |
 | その他 | off (#000) | [0, 0, 0] |
@@ -191,7 +192,8 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 | `buildPadData(baseNote)` | 8x8パッドのデータ配列を生成 |
 | `buildGridDOM()` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
 | `updateAll()` | 画面更新 + Launchpad LED送信の中心関数 |
-| `sendToLaunchpad()` | SysEx RGBメッセージをLaunchpadに送信 |
+| `getChordPitchClasses()` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音のPC（基本形時は `null`） |
+| `sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC)` | SysEx RGBメッセージをLaunchpadに送信（bassPC対応） |
 | `setupMIDIInput()` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
 | `startNote(midiNote, velocity?)` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録） |
 | `stopNote(midiNote)` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
@@ -221,13 +223,13 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 
 ### 中央パネル（Launchpad）
 6. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
-7. コード名・構成音・インターバル表示
+7. コード名・構成音・インターバル表示（転回時はスラッシュコード表記: 例 `C/E`）
 
 ### 右パネル（Chord Controls）
-8. Root — 12音ボタン（ラベル色 = `--root-color`、常時表示）
-9. Chord（トグルボタン兼ラベル、active色 = `--chord-color`）— コードタイプ17種
-10. Scale（トグルボタン兼ラベル、active色 = `--scale-color`）— スケール種別7種
-11. Inversion（トグルボタン兼ラベル）— 転回形選択（動的生成）/ ON時のみ展開
+8. Root — 12音ボタン（ラベル色 = `--root-color`、active色 = `--root-color`、常時表示）
+9. Chord（トグルボタン兼ラベル、active色 = `--chord-color`）— コードタイプ17種（active色 = `--chord-color`）
+10. Scale（トグルボタン兼ラベル、active色 = `--scale-color`）— スケール種別7種（active色 = `--scale-color`）
+11. Inversion（トグルボタン兼ラベル、active色 = #ffaa33）— 転回形選択（動的生成）/ ON時のみ展開 / ラベル: Root / 1st / 2nd / 3rd / 4th（active色 = #ffaa33）
 12. Capo — ◄ 数値表示 ► RST（視覚パターン固定で半音単位移調）
 
 ### トグルの挙動

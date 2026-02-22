@@ -382,7 +382,8 @@ function getChordPitchClasses() {
   const raw = intervals.map(i => (state.root + i) % 12);
   const inv = state.showInversion ? state.inversion : 0;
   const inverted = [...raw.slice(inv), ...raw.slice(0, inv)];
-  return { all: raw, inverted };
+  const bassPC = inv > 0 ? inverted[0] : null;
+  return { all: raw, inverted, bassPC };
 }
 
 function getScalePitchClasses() {
@@ -393,12 +394,12 @@ function buildInversionButtons() {
   const row = document.getElementById('inversion-row');
   row.innerHTML = '';
   const n = CHORD_TYPES[state.chordType].intervals.length;
-  const labels = ['基本形', '第1転', '第2転', '第3転', '第4転'];
+  const labels = ['Root', '1st', '2nd', '3rd', '4th'];
   for (let i = 0; i < n; i++) {
     const btn = document.createElement('button');
     btn.className = 'btn' + (i === state.inversion ? ' active' : '');
-    btn.textContent = labels[i] || `転${i}`;
-    btn.onclick = () => { state.inversion = i; updateAll(); setActive(row, btn); };
+    btn.textContent = labels[i] || `${i}th`;
+    btn.onclick = () => { state.inversion = i; updateAll(); };
     row.appendChild(btn);
   }
 }
@@ -419,12 +420,15 @@ function updateAll() {
     const el = padEls[idx];
     const pc = pad.pitchClass;
     const isRoot = pc === rootPC && chordPCs.all.includes(pc);
+    const isBass = chordPCs.bassPC !== null && pc === chordPCs.bassPC;
     const isChord = chordPCs.all.includes(pc);
     const isScale = scalePCs.includes(pc);
 
     el.className = 'pad';
     if (isRoot) {
       el.classList.add('root');
+    } else if (state.showChord && isBass) {
+      el.classList.add('bass');
     } else if (state.showChord && isChord) {
       el.classList.add('chord');
     } else if (state.showScale && isScale) {
@@ -437,7 +441,8 @@ function updateAll() {
   // Chord display
   const sym = CHORD_TYPES[state.chordType].symbol;
   const rootName = NOTE_NAMES[state.root];
-  document.getElementById('chord-name').textContent = rootName + sym;
+  const bassName = chordPCs.bassPC !== null ? '/' + NOTE_NAMES[chordPCs.bassPC] : '';
+  document.getElementById('chord-name').textContent = rootName + sym + bassName;
 
   const noteNames = chordPCs.inverted.map(pc => NOTE_NAMES[pc]).join('  ');
   document.getElementById('chord-notes').textContent = noteNames;
@@ -458,7 +463,7 @@ function updateAll() {
   }
 
   // Send to Launchpad
-  sendToLaunchpad(chordPCs.all, scalePCs, rootPC);
+  sendToLaunchpad(chordPCs.all, scalePCs, rootPC, chordPCs.bassPC);
 }
 
 // =====================
@@ -470,6 +475,7 @@ const COLORS = {
   root:  [127, 0, 40],
   chord: [0, 100, 127],
   scale: [0, 127, 60],
+  bass:  [127, 80, 0],
   off:   [0, 0, 0],
 };
 
@@ -706,7 +712,7 @@ function stopMetronome() {
   log('Metronome OFF', 'out');
 }
 
-function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
+function sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC) {
   if (!state.midiOutput) return;
 
   // SysEx RGB lighting: F0 00 20 29 02 0C 03 [03 pad r g b] ... F7
@@ -715,11 +721,13 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
   pads.forEach(pad => {
     const pc = pad.pitchClass;
     const isRoot = pc === rootPC && chordPCs.includes(pc);
+    const isBass = bassPC !== null && pc === bassPC;
     const isChord = chordPCs.includes(pc);
     const isScale = scalePCs.includes(pc);
 
     let color;
     if (isRoot)                          color = COLORS.root;
+    else if (state.showChord && isBass)  color = COLORS.bass;
     else if (state.showChord && isChord) color = COLORS.chord;
     else if (state.showScale && isScale) color = COLORS.scale;
     else                                 color = COLORS.off;

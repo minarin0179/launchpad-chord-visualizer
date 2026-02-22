@@ -109,6 +109,22 @@ header p {
   color: #000;
   font-weight: 700;
 }
+#root-buttons .btn.active {
+  background: var(--root-color);
+  border-color: var(--root-color);
+}
+#chord-buttons .btn.active {
+  background: var(--chord-color);
+  border-color: var(--chord-color);
+}
+#scale-buttons .btn.active {
+  background: var(--scale-color);
+  border-color: var(--scale-color);
+}
+#inversion-row .btn.active {
+  background: #ffaa33;
+  border-color: #ffaa33;
+}
 
 /* Toggle buttons */
 .toggle-row {
@@ -221,6 +237,11 @@ header p {
   box-shadow: 0 0 10px var(--chord-color);
 }
 .pad.chord::after { color: rgba(0,0,0,0.5); }
+.pad.bass {
+  background: #ffaa33;
+  box-shadow: 0 0 10px #ffaa33;
+}
+.pad.bass::after { color: rgba(0,0,0,0.5); }
 .pad.scale-only {
   background: var(--scale-color);
   box-shadow: 0 0 8px var(--scale-color);
