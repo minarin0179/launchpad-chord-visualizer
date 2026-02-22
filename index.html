@@ -169,11 +169,11 @@
     min-height: 1em;
   }
 
-  /* Launchpad grid */
+  /* Launchpad grid — 9x9 with surrounding buttons */
   .grid {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(8, 1fr);
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
     gap: 4px;
     width: 100%;
     aspect-ratio: 1;
@@ -225,6 +225,22 @@
   .pad.off {
     background: #1a1a28;
   }
+  .pad.fn-btn {
+    background: #1a1a28;
+    border-radius: 50%;
+    border: 1px solid #2a2a3a;
+  }
+  .pad.fn-btn::after {
+    font-size: clamp(0.35rem, 1vw, 0.5rem);
+    color: rgba(255,255,255,0.4);
+  }
+  .pad.fn-btn:hover { border-color: var(--accent); }
+  .pad.fn-btn.fn-active {
+    background: #ff9933;
+    box-shadow: 0 0 8px #ff9933;
+  }
+  .pad.fn-btn.fn-active::after { color: rgba(0,0,0,0.6); }
+  .pad.fn-corner { visibility: hidden; }
 
   /* Current chord display */
   #chord-display {
@@ -468,18 +484,33 @@ const INTERVAL_NAMES = ['R','b2','2','b3','3','4','#4','5','b6','6','b7','7','(8
 // =====================
 // Grid Layout
 // =====================
-// Launchpad X Programmer mode: pad note = (row+1)*10 + (col+1)
+// Launchpad X Programmer mode:
+//   8x8 grid: Note On/Off, note = (row+1)*10 + (col+1), i.e. 11-88
+//   Top row (round): CC 91-98
+//   Right column (round): Note 19, 29, 39, 49, 59, 69, 79, 89
 // Musical layout: guitar-style, each row +5 semitones (perfect 4th)
-// Bottom-left = MIDI note 36 (C2)
-const BASE_NOTE = 36;
 const ROW_INTERVAL = 5;
 
-function buildPadData() {
+// Top row CC assignments (Ableton Live style)
+const CC_UP       = 91;  // Octave Up
+const CC_DOWN     = 92;  // Octave Down
+const CC_LEFT     = 93;  // Transpose -1
+const CC_RIGHT    = 94;  // Transpose +1
+// CC 95-98: reserved (future use)
+
+// Right column note numbers
+const RIGHT_COL_NOTES = [89, 79, 69, 59, 49, 39, 29, 19]; // top to bottom
+
+// Top row labels for UI
+const TOP_ROW_LABELS = ['OCT▲', 'OCT▼', '◄', '►', '', '', '', ''];
+const TOP_ROW_CCS    = [91, 92, 93, 94, 95, 96, 97, 98];
+
+function buildPadData(baseNote) {
   const pads = [];
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
-      const semitone = BASE_NOTE + row * ROW_INTERVAL + col;
-      const pitchClass = semitone % 12;
+      const semitone = baseNote + row * ROW_INTERVAL + col;
+      const pitchClass = ((semitone % 12) + 12) % 12;
       const launchpadNote = (row + 1) * 10 + (col + 1);
       pads.push({ row, col, semitone, pitchClass, launchpadNote });
     }
@@ -487,12 +518,11 @@ function buildPadData() {
   return pads;
 }
 
-const pads = buildPadData();
-
 // =====================
 // State
 // =====================
 const state = {
+  baseNote: 36,   // C2 default — shifted by octave/transpose
   root: 0,
   chordType: 'maj',
   inversion: 0,
@@ -503,6 +533,8 @@ const state = {
   midiOutput: null,
   midiAccess: null,
 };
+
+let pads = buildPadData(state.baseNote);
 
 // =====================
 // DOM: Root buttons
@@ -568,29 +600,133 @@ document.getElementById('toggle-inversion').onclick = function() {
 };
 
 // =====================
-// DOM: Pad grid
+// DOM: Pad grid (9x9: top row CCs + right column + 8x8 main)
 // =====================
 const gridEl = document.getElementById('pad-grid');
-const padEls = [];
+let padEls = [];       // indexed by padIdx (row*8+col) for main 8x8
+const topRowEls = [];  // indexed 0-7 for CC 91-98
+const rightColEls = []; // indexed 0-7 for right column (row 7 down to 0)
 
-for (let row = 7; row >= 0; row--) {
-  for (let col = 0; col < 8; col++) {
-    const padIdx = row * 8 + col;
-    const pad = pads[padIdx];
+function buildGridDOM() {
+  gridEl.innerHTML = '';
+  padEls = [];
+
+  // --- Top row: CC buttons (91-98) + corner ---
+  for (let i = 0; i < 9; i++) {
     const el = document.createElement('div');
-    el.className = 'pad off';
-    el.dataset.note = NOTE_NAMES[pad.pitchClass];
-    el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
-    el.onpointerdown = (e) => {
-      e.preventDefault();
-      playNote(pad.semitone);
-      el.classList.add('pressed');
-    };
-    el.onpointerup = () => el.classList.remove('pressed');
-    el.onpointerleave = () => el.classList.remove('pressed');
+    if (i < 8) {
+      el.className = 'pad fn-btn';
+      el.dataset.note = TOP_ROW_LABELS[i] || `CC${TOP_ROW_CCS[i]}`;
+      el.title = `CC ${TOP_ROW_CCS[i]}`;
+      el.onpointerdown = (e) => { e.preventDefault(); handleTopRowPress(i); };
+      topRowEls[i] = el;
+    } else {
+      // top-right corner (empty)
+      el.className = 'pad fn-corner';
+    }
     gridEl.appendChild(el);
-    padEls[padIdx] = el;
   }
+
+  // --- Main 8x8 grid + right column ---
+  for (let row = 7; row >= 0; row--) {
+    // 8 main pads
+    for (let col = 0; col < 8; col++) {
+      const padIdx = row * 8 + col;
+      const pad = pads[padIdx];
+      const el = document.createElement('div');
+      el.className = 'pad off';
+      el.dataset.note = NOTE_NAMES[pad.pitchClass];
+      el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
+      el.onpointerdown = (e) => {
+        e.preventDefault();
+        playNote(pad.semitone);
+        el.classList.add('pressed');
+      };
+      el.onpointerup = () => el.classList.remove('pressed');
+      el.onpointerleave = () => el.classList.remove('pressed');
+      gridEl.appendChild(el);
+      padEls[padIdx] = el;
+    }
+    // Right column button
+    const rcIdx = 7 - row; // top-to-bottom index
+    const rcEl = document.createElement('div');
+    rcEl.className = 'pad fn-btn';
+    const rcNote = RIGHT_COL_NOTES[rcIdx];
+    rcEl.dataset.note = `N${rcNote}`;
+    rcEl.title = `Note ${rcNote}`;
+    rcEl.onpointerdown = (e) => {
+      e.preventDefault();
+      handleRightColPress(rcIdx);
+      rcEl.classList.add('pressed');
+    };
+    rcEl.onpointerup = () => rcEl.classList.remove('pressed');
+    rcEl.onpointerleave = () => rcEl.classList.remove('pressed');
+    gridEl.appendChild(rcEl);
+    rightColEls[rcIdx] = rcEl;
+  }
+}
+
+buildGridDOM();
+
+// --- Octave / Transpose handlers ---
+function shiftOctave(delta) {
+  const newBase = state.baseNote + delta * 12;
+  if (newBase < 0 || newBase > 108) return;
+  state.baseNote = newBase;
+  rebuildPads();
+  const noteName = NOTE_NAMES[state.baseNote % 12];
+  const octave = Math.floor(state.baseNote / 12) - 1;
+  log(`Octave → ${noteName}${octave} (base=${state.baseNote})`, 'out');
+}
+
+function shiftTranspose(delta) {
+  const newBase = state.baseNote + delta;
+  if (newBase < 0 || newBase > 115) return;
+  state.baseNote = newBase;
+  rebuildPads();
+  const noteName = NOTE_NAMES[state.baseNote % 12];
+  const octave = Math.floor(state.baseNote / 12) - 1;
+  log(`Transpose → ${noteName}${octave} (base=${state.baseNote})`, 'out');
+}
+
+function rebuildPads() {
+  pads = buildPadData(state.baseNote);
+  // Update DOM data attributes and titles
+  pads.forEach((pad, idx) => {
+    if (padEls[idx]) {
+      padEls[idx].dataset.note = NOTE_NAMES[pad.pitchClass];
+      padEls[idx].title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
+      // Rebind click with new semitone
+      padEls[idx].onpointerdown = (e) => {
+        e.preventDefault();
+        playNote(pad.semitone);
+        padEls[idx].classList.add('pressed');
+      };
+    }
+  });
+  updateBaseNoteDisplay();
+  updateAll();
+}
+
+function updateBaseNoteDisplay() {
+  const noteName = NOTE_NAMES[state.baseNote % 12];
+  const octave = Math.floor(state.baseNote / 12) - 1;
+  document.getElementById('scale-key-label').dataset.base = `${noteName}${octave}`;
+}
+
+function handleTopRowPress(index) {
+  switch (TOP_ROW_CCS[index]) {
+    case CC_UP:    shiftOctave(+1); break;
+    case CC_DOWN:  shiftOctave(-1); break;
+    case CC_LEFT:  shiftTranspose(-1); break;
+    case CC_RIGHT: shiftTranspose(+1); break;
+    default:
+      log(`Top row CC${TOP_ROW_CCS[index]} pressed`, 'in');
+  }
+}
+
+function handleRightColPress(index) {
+  log(`Right col Note ${RIGHT_COL_NOTES[index]} pressed`, 'in');
 }
 
 // =====================
@@ -665,12 +801,15 @@ function updateAll() {
   const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`);
   document.getElementById('chord-interval').textContent = intNames.join(' — ');
 
-  // Scale label
+  // Scale label + base note info
+  const baseNoteName = NOTE_NAMES[state.baseNote % 12];
+  const baseOctave = Math.floor(state.baseNote / 12) - 1;
+  const baseInfo = `[Base: ${baseNoteName}${baseOctave}]`;
   if (state.showScale) {
     document.getElementById('scale-key-label').textContent =
-      `${rootName} ${SCALES[state.scale].label} Scale`;
+      `${rootName} ${SCALES[state.scale].label} Scale  ${baseInfo}`;
   } else {
-    document.getElementById('scale-key-label').textContent = '';
+    document.getElementById('scale-key-label').textContent = baseInfo;
   }
 
   // Send to Launchpad
@@ -859,10 +998,18 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
     data.push(0x03, pad.launchpadNote, color[0], color[1], color[2]);
   });
 
+  // Top row buttons — light up OCT▲, OCT▼, ◄, ► in orange
+  const fnColor = [60, 30, 0];   // warm orange
+  const fnOff   = [3, 3, 3];
+  TOP_ROW_CCS.forEach((cc, i) => {
+    const color = i < 4 ? fnColor : fnOff;
+    data.push(0x03, cc, color[0], color[1], color[2]);
+  });
+
   data.push(0xF7);
   try {
     state.midiOutput.send(data);
-    log(`SysEx → RGB lighting (${pads.length} pads)`, 'out');
+    log(`SysEx → RGB lighting (${pads.length + 8} LEDs)`, 'out');
   } catch(e) {
     log('MIDI send error: ' + e.message, 'err');
   }
@@ -878,8 +1025,12 @@ document.getElementById('clear-btn').onclick = () => {
   pads.forEach(pad => {
     data.push(0x03, pad.launchpadNote, 0, 0, 0);
   });
+  // Also clear top row and right column
+  TOP_ROW_CCS.forEach(cc => data.push(0x03, cc, 0, 0, 0));
+  RIGHT_COL_NOTES.forEach(n => data.push(0x03, n, 0, 0, 0));
   data.push(0xF7);
   try { state.midiOutput.send(data); } catch(e) {}
+  log('All LEDs cleared', 'out');
 };
 
 // =====================
@@ -941,28 +1092,62 @@ function playNote(midiNote, velocity) {
 }
 
 // =====================
-// MIDI Input (Launchpad pad → sound)
+// MIDI Input (Launchpad → sound + control)
 // =====================
-const launchpadToSemitone = {};
-pads.forEach(pad => { launchpadToSemitone[pad.launchpadNote] = pad.semitone; });
+function getLaunchpadSemitone(note) {
+  const pad = pads.find(p => p.launchpadNote === note);
+  return pad ? pad.semitone : undefined;
+}
 
 function setupMIDIInput(access) {
   for (const input of access.inputs.values()) {
     input.onmidimessage = (event) => {
-      const [status, note, velocity] = event.data;
-      if (status === 0x90 && velocity > 0) {
-        const semitone = launchpadToSemitone[note];
+      const [status, data1, data2] = event.data;
+
+      // --- CC messages (top row buttons) ---
+      if ((status & 0xF0) === 0xB0 && data2 > 0) {
+        const ccIdx = TOP_ROW_CCS.indexOf(data1);
+        if (ccIdx >= 0) {
+          log(`CC IN: CC${data1} val=${data2}`, 'in');
+          handleTopRowPress(ccIdx);
+          if (topRowEls[ccIdx]) {
+            topRowEls[ccIdx].classList.add('fn-active');
+            setTimeout(() => topRowEls[ccIdx].classList.remove('fn-active'), 200);
+          }
+          return;
+        }
+        log(`CC IN: CC${data1} val=${data2}`, 'in');
+        return;
+      }
+
+      // --- Note On ---
+      if ((status & 0xF0) === 0x90 && data2 > 0) {
+        // Right column buttons (19, 29, ..., 89)
+        const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
+        if (rcIdx >= 0) {
+          log(`Right col IN: Note ${data1} vel=${data2}`, 'in');
+          handleRightColPress(rcIdx);
+          if (rightColEls[rcIdx]) {
+            rightColEls[rcIdx].classList.add('pressed');
+            setTimeout(() => rightColEls[rcIdx].classList.remove('pressed'), 150);
+          }
+          return;
+        }
+
+        // Main 8x8 grid
+        const semitone = getLaunchpadSemitone(data1);
         if (semitone !== undefined) {
-          const noteName = NOTE_NAMES[semitone % 12];
+          const noteName = NOTE_NAMES[((semitone % 12) + 12) % 12];
           const octave = Math.floor(semitone / 12) - 1;
-          log(`Pad IN: note=${note} → ${noteName}${octave} vel=${velocity}`, 'in');
-          playNote(semitone, velocity);
-          const padIdx = pads.findIndex(p => p.launchpadNote === note);
+          log(`Pad IN: note=${data1} → ${noteName}${octave} vel=${data2}`, 'in');
+          playNote(semitone, data2);
+          const padIdx = pads.findIndex(p => p.launchpadNote === data1);
           if (padIdx >= 0 && padEls[padIdx]) {
             padEls[padIdx].classList.add('pressed');
             setTimeout(() => padEls[padIdx].classList.remove('pressed'), 150);
           }
         }
+        return;
       }
     };
   }
