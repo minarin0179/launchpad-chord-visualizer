@@ -4,17 +4,28 @@
 
 ## プロジェクト構成
 
-- `index.html` — HTML構造のみ（`style.css` と `app.js` を外部参照）
+- `index.html` — HTML構造のみ（`style.css` と `js/main.js` を外部参照）
 - `style.css` — 全スタイル定義
-- `app.js` — 全ロジック（音楽理論データ・DOM操作・MIDI・Web Audio）
-- ビルドツール・フレームワークなし。ブラウザで直接開いて使用（Chrome推奨）
+- `js/` — ロジック（ES Modules で機能別に分割）
+  - `constants.js` — 音楽理論定数・楽器プリセット・グリッド定数・LED色・`buildPadData()`
+  - `state.js` — グローバル `state` オブジェクト・`pads` (live binding)・`setPads()`
+  - `logger.js` — `log()` 関数
+  - `audio.js` — Web Audio シンセ（`startNote` / `stopNote`）・メトロノームクリック音
+  - `music.js` — コード計算・スケール計算・コード自動検出・UI表示更新
+  - `led.js` — SysEx LED 制御（`sendToLaunchpad` / `flashPressedPad` / `clearAllLEDs`）
+  - `grid.js` — グリッド DOM 構築・カポ・オクターブ操作
+  - `midi.js` — MIDI デバイス管理・MIDI 入力ハンドリング
+  - `main.js` — エントリーポイント（`updateAll`・メトロノーム・ボタン生成・全体統合）
+- ビルドツール・フレームワークなし。**ローカルサーバー経由で使用**（Chrome推奨）
 
 ## 技術スタック
 
 - **Web MIDI API** — SysEx有効（`requestMIDIAccess({ sysex: true })`）
 - **Web Audio API** — オシレーターベースのシンセ音源
-- **Vanilla JS** — フレームワーク依存なし
+- **Vanilla JS / ES Modules** — フレームワーク依存なし（`import` / `export`）
 - **Google Fonts** — Space Mono / Noto Sans JP
+
+> **起動方法**: ES Modules は `file://` 不可。`python -m http.server 8080` や VS Code Live Server を使用。
 
 ---
 
@@ -187,26 +198,26 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 
 ## 主要な関数
 
-| 関数 | 役割 |
-|------|------|
-| `buildPadData(baseNote)` | 8x8パッドのデータ配列を生成 |
-| `buildGridDOM()` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
-| `updateAll()` | 画面更新 + Launchpad LED送信の中心関数 |
-| `getChordPitchClasses()` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音のPC（基本形時は `null`） |
-| `sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC)` | SysEx RGBメッセージをLaunchpadに送信（bassPC対応） |
-| `setupMIDIInput()` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
-| `startNote(midiNote, velocity?)` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録） |
-| `stopNote(midiNote)` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
-| `shiftCapo(delta)` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
-| `updateCapoDisplay()` | Capo UIの数値表示を更新 |
-| `rebuildPads()` | オクターブ/Capo後にパッドデータとDOMを更新 |
-| `setProgrammerMode()` | SysExでProgrammerモードに切替 |
-| `sendLogoLED(r, g, b)` | パッド99（ロゴ）にRGB色を送信（単体SysEx） |
-| `updateLogoLED()` | 接続状態に応じてロゴLEDを更新（接続中=緑、切断=消灯） |
-| `playMetronomeClick(isAccent)` | メトロノームのクリック音を再生（アクセント拍/通常拍で周波数・音量が異なる） |
-| `metronomeBeat()` | 1ビート処理（LEDフラッシュ + クリック音 + 拍カウンター更新） |
-| `startMetronome()` | メトロノーム開始（タイマー設定・拍カウンターリセット） |
-| `stopMetronome()` | メトロノーム停止（タイマー解除・ロゴLEDを接続色に戻す） |
+| 関数 | ファイル | 役割 |
+|------|---------|------|
+| `buildPadData(baseNote)` | `constants.js` | 8x8パッドのデータ配列を生成 |
+| `buildGridDOM(onPadDown, onPadUp, onAfterRebuild)` | `grid.js` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
+| `updateAll()` | `main.js` | 画面更新 + Launchpad LED送信の中心関数 |
+| `getChordPitchClasses()` | `music.js` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音のPC（基本形時は `null`） |
+| `sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC)` | `led.js` | SysEx RGBメッセージをLaunchpadに送信（bassPC対応） |
+| `setupMIDIInput(access)` | `midi.js` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
+| `startNote(midiNote, velocity?, onNoteChange?)` | `audio.js` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録） |
+| `stopNote(midiNote, onNoteChange?)` | `audio.js` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
+| `shiftCapo(delta)` | `grid.js` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
+| `updateCapoDisplay()` | `grid.js` | Capo UIの数値表示を更新 |
+| `rebuildPads()` | `grid.js` | オクターブ/Capo後にパッドデータとDOMを更新 |
+| `setProgrammerMode()` | `led.js` | SysExでProgrammerモードに切替 |
+| `sendLogoLED(r, g, b)` | `led.js` | パッド99（ロゴ）にRGB色を送信（単体SysEx） |
+| `updateLogoLED()` | `led.js` | 接続状態に応じてロゴLEDを更新（接続中=緑、切断=消灯） |
+| `playMetronomeClick(isAccent)` | `audio.js` | メトロノームのクリック音を再生（アクセント拍/通常拍で周波数・音量が異なる） |
+| `metronomeBeat()` | `main.js` | 1ビート処理（LEDフラッシュ + クリック音 + 拍カウンター更新） |
+| `startMetronome()` | `main.js` | メトロノーム開始（タイマー設定・拍カウンターリセット） |
+| `stopMetronome()` | `main.js` | メトロノーム停止（タイマー解除・ロゴLEDを接続色に戻す） |
 
 ---
 
