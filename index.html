@@ -327,8 +327,11 @@
 
 <div class="midi-row">
   <select id="device-select"><option value="">-- MIDI デバイスなし --</option></select>
+  <button class="send-btn" id="rescan-btn">RESCAN</button>
   <button class="send-btn" id="send-btn" disabled>SEND</button>
   <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>
+</div>
+<div id="midi-hint" style="font-size:0.55rem;color:#555577;font-family:'Noto Sans JP',sans-serif;text-align:center;max-width:500px;display:none">
 </div>
 
 <div class="controls">
@@ -637,6 +640,7 @@ const COLORS = {
 
 async function initMIDI() {
   const statusEl = document.getElementById('midi-status');
+  const hintEl = document.getElementById('midi-hint');
   if (!navigator.requestMIDIAccess) {
     statusEl.textContent = 'WebMIDI 非対応 (Chrome推奨)';
     statusEl.className = 'disconnected';
@@ -646,51 +650,110 @@ async function initMIDI() {
     const access = await navigator.requestMIDIAccess({ sysex: true });
     state.midiAccess = access;
     populateDevices(access);
-    access.onstatechange = () => populateDevices(access);
-    statusEl.textContent = 'WebMIDI Ready';
-    statusEl.className = 'connected';
+    setupMIDIInput(access);
+    access.onstatechange = (e) => {
+      console.log('MIDI state change:', e.port.name, e.port.state);
+      populateDevices(access);
+      setupMIDIInput(access);
+    };
   } catch(e) {
     statusEl.textContent = 'MIDI アクセス拒否';
     statusEl.className = 'disconnected';
+    hintEl.textContent = 'ブラウザがMIDIアクセスを拒否しました。アドレスバーの鍵アイコンからMIDI許可を確認してください。';
+    hintEl.style.display = '';
   }
 }
 
 function populateDevices(access) {
   const sel = document.getElementById('device-select');
+  const statusEl = document.getElementById('midi-status');
+  const hintEl = document.getElementById('midi-hint');
   const prev = sel.value;
   sel.innerHTML = '<option value="">-- デバイスを選択 --</option>';
   let autoSelected = false;
+  let outputCount = 0;
+  const deviceNames = [];
 
   for (const [id, output] of access.outputs) {
+    // Skip disconnected ports
+    if (output.state === 'disconnected') continue;
     const opt = document.createElement('option');
     opt.value = id;
-    opt.textContent = output.name;
+    opt.textContent = `${output.name} [${output.state}]`;
     sel.appendChild(opt);
+    deviceNames.push(output.name);
+    outputCount++;
     // Auto-select Launchpad
     if (!autoSelected && output.name.toLowerCase().includes('launchpad')) {
       sel.value = id;
       autoSelected = true;
     }
   }
+
   // Restore previous selection if still available
   if (!autoSelected && prev) {
     const prevOpt = sel.querySelector(`option[value="${prev}"]`);
     if (prevOpt) sel.value = prev;
   }
+
+  // Update status and hint based on device count
+  if (outputCount === 0) {
+    statusEl.textContent = 'デバイスなし — RESCANしてください';
+    statusEl.className = 'disconnected';
+    hintEl.innerHTML = 'MIDIデバイスが見つかりません。以下を確認してください：<br>'
+      + '・Ableton Live等の他のアプリがMIDIポートを占有していないか（Windowsでは排他的）<br>'
+      + '・USBケーブルが正しく接続されているか<br>'
+      + '・他のアプリを閉じてからRESCANボタンを押してください';
+    hintEl.style.display = '';
+  } else {
+    statusEl.textContent = `接続済み (${outputCount} デバイス)`;
+    statusEl.className = 'connected';
+    hintEl.style.display = 'none';
+  }
+
+  console.log(`MIDI outputs found: ${outputCount}`, deviceNames);
   onDeviceSelect();
 }
+
+// Rescan button
+document.getElementById('rescan-btn').onclick = async () => {
+  const statusEl = document.getElementById('midi-status');
+  statusEl.textContent = 'RESCAN 中...';
+  statusEl.className = 'searching';
+  // Re-request MIDI access to force refresh
+  try {
+    const access = await navigator.requestMIDIAccess({ sysex: true });
+    state.midiAccess = access;
+    populateDevices(access);
+    setupMIDIInput(access);
+    access.onstatechange = (e) => {
+      console.log('MIDI state change:', e.port.name, e.port.state);
+      populateDevices(access);
+      setupMIDIInput(access);
+    };
+  } catch(e) {
+    statusEl.textContent = 'MIDI アクセス拒否';
+    statusEl.className = 'disconnected';
+  }
+};
 
 document.getElementById('device-select').onchange = onDeviceSelect;
 
 function onDeviceSelect() {
   const id = document.getElementById('device-select').value;
   if (id && state.midiAccess) {
-    state.midiOutput = state.midiAccess.outputs.get(id);
-    document.getElementById('send-btn').disabled = false;
-    document.getElementById('clear-btn').disabled = false;
-    setProgrammerMode();
-    // Small delay to let Programmer mode take effect before sending
-    setTimeout(() => updateAll(), 100);
+    const output = state.midiAccess.outputs.get(id);
+    if (output && output.state === 'connected') {
+      state.midiOutput = output;
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('clear-btn').disabled = false;
+      setProgrammerMode();
+      setTimeout(() => updateAll(), 100);
+    } else {
+      state.midiOutput = null;
+      document.getElementById('send-btn').disabled = true;
+      document.getElementById('clear-btn').disabled = true;
+    }
   } else {
     state.midiOutput = null;
     document.getElementById('send-btn').disabled = true;
@@ -708,7 +771,6 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
   if (!state.midiOutput) return;
 
   // SysEx RGB lighting: F0 00 20 29 02 0C 03 [03 pad r g b] ... F7
-  // The '03' before each pad means "RGB mode per LED"
   const data = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03];
 
   pads.forEach(pad => {
@@ -723,7 +785,6 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
     else if (state.showScale && isScale) color = COLORS.scale;
     else                                 color = state.dimOthers ? COLORS.dim : COLORS.off;
 
-    // Each LED: [type=03, padNote, r, g, b]
     data.push(0x03, pad.launchpadNote, color[0], color[1], color[2]);
   });
 
