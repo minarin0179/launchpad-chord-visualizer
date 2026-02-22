@@ -10,6 +10,13 @@ import { buildGridDOM, handleTopRowPress, handleRightColPress,
          shiftCapo, padEls } from './grid.js';
 import { initMIDI, onDeviceSelect, populateDevices, setupMIDIInput } from './midi.js';
 
+// メトロノーム内部状態（公開 state に含めない）
+let _metroTimer = null;
+let _metroBeat  = 0;
+
+// updateAll() で前回の視覚状態と比較するためのキャッシュ
+let _prevUpdateKey = null;
+
 // =====================
 // Note change callback (audio → chord detection)
 // =====================
@@ -23,36 +30,45 @@ function handleNoteChange() {
 function updateAll() {
   const maxInv = CHORD_TYPES[state.chordType].intervals.length - 1;
   if (state.inversion > maxInv) state.inversion = 0;
-  buildInversionButtons(updateAll);
 
   const chordPCs = getChordPitchClasses();
   const scalePCs = getScalePitchClasses();
   const rootPC   = state.root;
 
-  pads.forEach((pad, idx) => {
-    const el = padEls[idx];
-    if (!el) return;
-    const pc = pad.pitchClass;
-    const isRoot  = pc === rootPC && chordPCs.all.includes(pc);
-    const isBass  = chordPCs.bassPC !== null && pc === chordPCs.bassPC;
-    const isChord = chordPCs.all.includes(pc);
-    const isScale = scalePCs.includes(pc);
+  // 視覚状態のキーを生成し、変化がなければ DOM 更新をスキップ
+  // （SENDボタン用に LED 送信は常時実行）
+  const key = `${rootPC}|${state.chordType}|${state.inversion}|${state.showChord}|${state.showScale}|${state.showInversion}|${state.scale}|${state.baseNote}`;
+  if (key !== _prevUpdateKey) {
+    _prevUpdateKey = key;
 
-    el.className = 'pad';
-    if (isRoot) {
-      el.classList.add('root');
-    } else if (state.showChord && isBass) {
-      el.classList.add('bass');
-    } else if (state.showChord && isChord) {
-      el.classList.add('chord');
-    } else if (state.showScale && isScale) {
-      el.classList.add('scale-only');
-    } else {
-      el.classList.add('off');
-    }
-  });
+    buildInversionButtons(updateAll);
 
-  updateChordDisplay();
+    pads.forEach((pad, idx) => {
+      const el = padEls[idx];
+      if (!el) return;
+      const pc = pad.pitchClass;
+      const isRoot  = pc === rootPC && chordPCs.all.includes(pc);
+      const isBass  = chordPCs.bassPC !== null && pc === chordPCs.bassPC;
+      const isChord = chordPCs.all.includes(pc);
+      const isScale = scalePCs.includes(pc);
+
+      el.className = 'pad';
+      if (isRoot) {
+        el.classList.add('root');
+      } else if (state.showChord && isBass) {
+        el.classList.add('bass');
+      } else if (state.showChord && isChord) {
+        el.classList.add('chord');
+      } else if (state.showScale && isScale) {
+        el.classList.add('scale-only');
+      } else {
+        el.classList.add('off');
+      }
+    });
+
+    updateChordDisplay();
+  }
+
   sendToLaunchpad(chordPCs.all, scalePCs, rootPC, chordPCs.bassPC);
 }
 
@@ -60,8 +76,8 @@ function updateAll() {
 // Metronome
 // =====================
 function metronomeBeat() {
-  const isAccent = state._metroBeat === 0;
-  state._metroBeat = (state._metroBeat + 1) % 4;
+  const isAccent = _metroBeat === 0;
+  _metroBeat = (_metroBeat + 1) % 4;
 
   sendLogoLED(isAccent ? 127 : 60, isAccent ? 127 : 80, isAccent ? 127 : 100);
   setTimeout(() => {
@@ -72,11 +88,11 @@ function metronomeBeat() {
 }
 
 function startMetronome() {
-  if (state._metroTimer) clearInterval(state._metroTimer);
-  state._metroBeat = 0;
+  if (_metroTimer) clearInterval(_metroTimer);
+  _metroBeat = 0;
   const ms = (60 / state.bpm) * 1000;
   metronomeBeat();
-  state._metroTimer = setInterval(metronomeBeat, ms);
+  _metroTimer = setInterval(metronomeBeat, ms);
   state.metronome = true;
   const btn = document.getElementById('metro-btn');
   btn.classList.add('active');
@@ -85,7 +101,7 @@ function startMetronome() {
 }
 
 function stopMetronome() {
-  if (state._metroTimer) { clearInterval(state._metroTimer); state._metroTimer = null; }
+  if (_metroTimer) { clearInterval(_metroTimer); _metroTimer = null; }
   state.metronome = false;
   const btn = document.getElementById('metro-btn');
   btn.classList.remove('active');
@@ -102,44 +118,48 @@ function setActive(container, activeBtn) {
   activeBtn.classList.add('active');
 }
 
+// items: { key, label }[] の配列を受け取りボタン群を生成する汎用ヘルパー
+function buildButtonGroup(containerId, items, activeKey, onClick) {
+  const container = document.getElementById(containerId);
+  items.forEach(({ key, label }) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (key === activeKey ? ' active' : '');
+    btn.textContent = label;
+    btn.onclick = () => { onClick(key); setActive(container, btn); };
+    container.appendChild(btn);
+  });
+}
+
 // =====================
 // DOM: Root / Chord / Scale / Instrument buttons
 // =====================
-const rootContainer = document.getElementById('root-buttons');
-NOTE_NAMES.forEach((name, i) => {
-  const btn = document.createElement('button');
-  btn.className = 'btn' + (i === 0 ? ' active' : '');
-  btn.textContent = name;
-  btn.onclick = () => { state.root = i; state.inversion = 0; updateAll(); setActive(rootContainer, btn); };
-  rootContainer.appendChild(btn);
-});
+buildButtonGroup(
+  'root-buttons',
+  NOTE_NAMES.map((name, i) => ({ key: i, label: name })),
+  0,
+  (i) => { state.root = i; state.inversion = 0; updateAll(); }
+);
 
-const chordContainer = document.getElementById('chord-buttons');
-Object.entries(CHORD_TYPES).forEach(([key, val]) => {
-  const btn = document.createElement('button');
-  btn.className = 'btn' + (key === 'maj' ? ' active' : '');
-  btn.textContent = val.label;
-  btn.onclick = () => { state.chordType = key; state.inversion = 0; updateAll(); setActive(chordContainer, btn); };
-  chordContainer.appendChild(btn);
-});
+buildButtonGroup(
+  'chord-buttons',
+  Object.entries(CHORD_TYPES).map(([key, val]) => ({ key, label: val.label })),
+  'maj',
+  (key) => { state.chordType = key; state.inversion = 0; updateAll(); }
+);
 
-const scaleContainer = document.getElementById('scale-buttons');
-Object.entries(SCALES).forEach(([key, val]) => {
-  const btn = document.createElement('button');
-  btn.className = 'btn' + (key === 'major' ? ' active' : '');
-  btn.textContent = val.label;
-  btn.onclick = () => { state.scale = key; updateAll(); setActive(scaleContainer, btn); };
-  scaleContainer.appendChild(btn);
-});
+buildButtonGroup(
+  'scale-buttons',
+  Object.entries(SCALES).map(([key, val]) => ({ key, label: val.label })),
+  'major',
+  (key) => { state.scale = key; updateAll(); }
+);
 
-const instrumentContainer = document.getElementById('instrument-buttons');
-Object.entries(INSTRUMENTS).forEach(([key, val]) => {
-  const btn = document.createElement('button');
-  btn.className = 'btn' + (key === state.instrument ? ' active' : '');
-  btn.textContent = val.label;
-  btn.onclick = () => { state.instrument = key; setActive(instrumentContainer, btn); };
-  instrumentContainer.appendChild(btn);
-});
+buildButtonGroup(
+  'instrument-buttons',
+  Object.entries(INSTRUMENTS).map(([key, val]) => ({ key, label: val.label })),
+  state.instrument,
+  (key) => { state.instrument = key; }
+);
 
 // =====================
 // DOM: Toggles

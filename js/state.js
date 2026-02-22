@@ -18,8 +18,6 @@ export const state = {
   midiAccess: null,
   bpm: 120,
   metronome: false,
-  _metroTimer: null,
-  _metroBeat: 0,
 };
 
 export let pads = buildPadData(state.baseNote);
