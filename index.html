@@ -1104,11 +1104,12 @@ function setupMIDIInput(access) {
     input.onmidimessage = (event) => {
       const [status, data1, data2] = event.data;
 
-      // --- CC messages (top row buttons) ---
+      // --- CC messages (top row + right column buttons) ---
       if ((status & 0xF0) === 0xB0 && data2 > 0) {
+        // Top row CC 91-98
         const ccIdx = TOP_ROW_CCS.indexOf(data1);
         if (ccIdx >= 0) {
-          log(`CC IN: CC${data1} val=${data2}`, 'in');
+          log(`CC IN: CC${data1} val=${data2} (top row)`, 'in');
           handleTopRowPress(ccIdx);
           if (topRowEls[ccIdx]) {
             topRowEls[ccIdx].classList.add('fn-active');
@@ -1116,13 +1117,24 @@ function setupMIDIInput(access) {
           }
           return;
         }
-        log(`CC IN: CC${data1} val=${data2}`, 'in');
+        // Right column CC 19,29,...,89
+        const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
+        if (rcIdx >= 0) {
+          log(`CC IN: CC${data1} val=${data2} (right col)`, 'in');
+          handleRightColPress(rcIdx);
+          if (rightColEls[rcIdx]) {
+            rightColEls[rcIdx].classList.add('fn-active');
+            setTimeout(() => rightColEls[rcIdx].classList.remove('fn-active'), 200);
+          }
+          return;
+        }
+        log(`CC IN: CC${data1} val=${data2} (unknown)`, 'in');
         return;
       }
 
       // --- Note On ---
       if ((status & 0xF0) === 0x90 && data2 > 0) {
-        // Right column buttons (19, 29, ..., 89)
+        // Right column as Note (fallback — some firmware versions)
         const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
         if (rcIdx >= 0) {
           log(`Right col IN: Note ${data1} vel=${data2}`, 'in');
