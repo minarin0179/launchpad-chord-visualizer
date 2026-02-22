@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,10 +10,10 @@
 
 <header>
   <h1>Launchpad X // Chord Visualizer</h1>
-  <p>コード名を選んでパッドを光らせる</p>
+  <p>Select a chord and light up the pads</p>
 </header>
 
-<div id="midi-status" class="searching">MIDI を検索中...</div>
+<div id="midi-status" class="searching">Searching for MIDI...</div>
 
 <div class="app-layout">
 
@@ -22,7 +22,7 @@
     <div class="panel-section">
       <div class="panel-label">Device</div>
       <div class="midi-row">
-        <select id="device-select"><option value="">-- MIDI デバイスなし --</option></select>
+        <select id="device-select"><option value="">-- No MIDI device --</option></select>
         <button class="send-btn" id="rescan-btn">RESCAN</button>
         <button class="send-btn" id="send-btn" disabled>SEND</button>
         <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>

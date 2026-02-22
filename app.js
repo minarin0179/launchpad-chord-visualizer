@@ -497,7 +497,7 @@ async function initMIDI() {
   const statusEl = document.getElementById('midi-status');
   const hintEl = document.getElementById('midi-hint');
   if (!navigator.requestMIDIAccess) {
-    statusEl.textContent = 'WebMIDI 非対応 (Chrome推奨)';
+    statusEl.textContent = 'WebMIDI not supported (Chrome recommended)';
     statusEl.className = 'disconnected';
     return;
   }
@@ -514,9 +514,9 @@ async function initMIDI() {
       updateLogoLED();
     };
   } catch(e) {
-    statusEl.textContent = 'MIDI アクセス拒否';
+    statusEl.textContent = 'MIDI access denied';
     statusEl.className = 'disconnected';
-    hintEl.textContent = 'ブラウザがMIDIアクセスを拒否しました。アドレスバーの鍵アイコンからMIDI許可を確認してください。';
+    hintEl.textContent = 'MIDI access was denied. Check the lock icon in the address bar to allow MIDI permission.';
     hintEl.style.display = '';
     log('MIDI access denied: ' + e.message, 'err');
   }
@@ -527,7 +527,7 @@ function populateDevices(access) {
   const statusEl = document.getElementById('midi-status');
   const hintEl = document.getElementById('midi-hint');
   const prev = sel.value;
-  sel.innerHTML = '<option value="">-- デバイスを選択 --</option>';
+  sel.innerHTML = '<option value="">-- Select device --</option>';
   let autoSelected = false;
   let outputCount = 0;
   const deviceNames = [];
@@ -556,15 +556,15 @@ function populateDevices(access) {
 
   // Update status and hint based on device count
   if (outputCount === 0) {
-    statusEl.textContent = 'デバイスなし — RESCANしてください';
+    statusEl.textContent = 'No device — press RESCAN';
     statusEl.className = 'disconnected';
-    hintEl.innerHTML = 'MIDIデバイスが見つかりません。以下を確認してください：<br>'
-      + '・Ableton Live等の他のアプリがMIDIポートを占有していないか（Windowsでは排他的）<br>'
-      + '・USBケーブルが正しく接続されているか<br>'
-      + '・他のアプリを閉じてからRESCANボタンを押してください';
+    hintEl.innerHTML = 'No MIDI devices found. Please check:<br>'
+      + '· Another app (e.g. Ableton Live) may be holding the MIDI port exclusively (Windows)<br>'
+      + '· Verify the USB cable is properly connected<br>'
+      + '· Close other apps and press RESCAN';
     hintEl.style.display = '';
   } else {
-    statusEl.textContent = `接続済み (${outputCount} デバイス)`;
+    statusEl.textContent = `Connected (${outputCount} device${outputCount > 1 ? 's' : ''})`;
     statusEl.className = 'connected';
     hintEl.style.display = 'none';
   }
@@ -580,7 +580,7 @@ function populateDevices(access) {
 // Rescan button
 document.getElementById('rescan-btn').onclick = async () => {
   const statusEl = document.getElementById('midi-status');
-  statusEl.textContent = 'RESCAN 中...';
+  statusEl.textContent = 'Rescanning...';
   statusEl.className = 'searching';
   // Re-request MIDI access to force refresh
   try {
@@ -596,7 +596,7 @@ document.getElementById('rescan-btn').onclick = async () => {
       updateLogoLED();
     };
   } catch(e) {
-    statusEl.textContent = 'MIDI アクセス拒否';
+    statusEl.textContent = 'MIDI access denied';
     statusEl.className = 'disconnected';
   }
 };
