@@ -36,6 +36,60 @@ const SCALES = {
 const INTERVAL_NAMES = ['R','b2','2','b3','3','4','#4','5','b6','6','b7','7','(8)','b9','9'];
 
 // =====================
+// Instrument Presets
+// =====================
+const INSTRUMENTS = {
+  synth: {
+    label: 'Synth',
+    osc1: { type: 'triangle' },
+    osc2: { type: 'sine', detune: 6, volRatio: 1.0 },
+    envelope: { attackBase: 0.005, attackVelRange: 0.045, decayTime: 0.07, sustainRatio: 0.5, releaseTime: 0.8 },
+    peakVolFactor: 0.25,
+    filter: null,
+  },
+  piano: {
+    label: 'Piano',
+    osc1: { type: 'sine' },
+    osc2: { type: 'triangle', detune: 0, volRatio: 0.25 },
+    envelope: { attackBase: 0.002, attackVelRange: 0.003, decayTime: 2.0, sustainRatio: 0.01, releaseTime: 0.3 },
+    peakVolFactor: 0.45,
+    filter: null,
+  },
+  organ: {
+    label: 'Organ',
+    harmonics: [1, 2, 3, 4],
+    harmonicGains: [1.0, 0.6, 0.3, 0.15],
+    envelope: { attackBase: 0.005, attackVelRange: 0, decayTime: 0, sustainRatio: 1.0, releaseTime: 0.04 },
+    peakVolFactor: 0.12,
+    filter: null,
+  },
+  guitar: {
+    label: 'Guitar',
+    osc1: { type: 'sawtooth' },
+    osc2: { type: 'sine', detune: 0, volRatio: 0.3 },
+    envelope: { attackBase: 0.001, attackVelRange: 0.002, decayTime: 0.2, sustainRatio: 0.03, releaseTime: 0.12 },
+    peakVolFactor: 0.3,
+    filter: { type: 'lowpass', frequency: 2500, Q: 1 },
+  },
+  bass: {
+    label: 'Bass',
+    osc1: { type: 'sine' },
+    osc2: { type: 'triangle', detune: -1200, volRatio: 0.2 },
+    envelope: { attackBase: 0.005, attackVelRange: 0.01, decayTime: 0.05, sustainRatio: 0.7, releaseTime: 0.3 },
+    peakVolFactor: 0.4,
+    filter: { type: 'lowpass', frequency: 600, Q: 1 },
+  },
+  strings: {
+    label: 'Strings',
+    osc1: { type: 'sawtooth' },
+    osc2: { type: 'sawtooth', detune: 5, volRatio: 0.7 },
+    envelope: { attackBase: 0.15, attackVelRange: 0.25, decayTime: 0, sustainRatio: 1.0, releaseTime: 1.5 },
+    peakVolFactor: 0.18,
+    filter: { type: 'lowpass', frequency: 1800, Q: 0.7 },
+  },
+};
+
+// =====================
 // Grid Layout
 // =====================
 // Launchpad X Programmer mode:
@@ -85,6 +139,7 @@ const state = {
   dimOthers: false,
   showInversion: false,
   scale: 'major',
+  instrument: 'piano',
   midiOutput: null,
   midiAccess: null,
 };
@@ -125,6 +180,18 @@ Object.entries(SCALES).forEach(([key, val]) => {
   btn.textContent = val.label;
   btn.onclick = () => { state.scale = key; updateAll(); setActive(scaleContainer, btn); };
   scaleContainer.appendChild(btn);
+});
+
+// =====================
+// DOM: Instrument buttons
+// =====================
+const instrumentContainer = document.getElementById('instrument-buttons');
+Object.entries(INSTRUMENTS).forEach(([key, val]) => {
+  const btn = document.createElement('button');
+  btn.className = 'btn' + (key === state.instrument ? ' active' : '');
+  btn.textContent = val.label;
+  btn.onclick = () => { state.instrument = key; setActive(instrumentContainer, btn); };
+  instrumentContainer.appendChild(btn);
 });
 
 function setActive(container, activeBtn) {
@@ -641,35 +708,71 @@ function startNote(midiNote, velocity = 64) {
 
   const freq = midiNoteToFreq(midiNote);
   const now = ctx.currentTime;
+  const inst = INSTRUMENTS[state.instrument] || INSTRUMENTS.synth;
 
-  const osc1 = ctx.createOscillator();
-  osc1.type = 'triangle';
-  osc1.frequency.setValueAtTime(freq, now);
-
-  const osc2 = ctx.createOscillator();
-  osc2.type = 'sine';
-  osc2.frequency.setValueAtTime(freq, now);
-  osc2.detune.setValueAtTime(6, now);
-
+  // Master gain (envelope)
   const gain = ctx.createGain();
-  const peakVol = vol * 0.25;
-  const sustainVol = peakVol * 0.5;
-  // velocity が高いほどアタックが速い: 127→5ms, 1→50ms
-  const attackTime = 0.005 + (1 - velocity / 127) * 0.045;
+  const peakVol = vol * inst.peakVolFactor;
+  const { attackBase, attackVelRange, decayTime, sustainRatio, releaseTime } = inst.envelope;
+  const attackTime = attackBase + (1 - velocity / 127) * attackVelRange;
+  const sustainVol = peakVol * sustainRatio;
 
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(peakVol, now + attackTime);
-  gain.gain.linearRampToValueAtTime(sustainVol, now + attackTime + 0.07);
-  // リリースは stopNote() で行う
+  if (decayTime > 0) {
+    gain.gain.linearRampToValueAtTime(Math.max(sustainVol, 0.0001), now + attackTime + decayTime);
+  }
 
-  osc1.connect(gain);
-  osc2.connect(gain);
-  gain.connect(ctx.destination);
+  // Routing: gain → [filter →] destination
+  if (inst.filter) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = inst.filter.type;
+    filter.frequency.value = inst.filter.frequency;
+    filter.Q.value = inst.filter.Q || 1;
+    gain.connect(filter);
+    filter.connect(ctx.destination);
+  } else {
+    gain.connect(ctx.destination);
+  }
 
-  osc1.start(now);
-  osc2.start(now);
+  // Create oscillators
+  const oscNodes = [];
+  if (inst.harmonics) {
+    // Organ mode: additive synthesis
+    inst.harmonics.forEach((mult, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq * mult, now);
+      const hGain = ctx.createGain();
+      hGain.gain.value = inst.harmonicGains[i];
+      osc.connect(hGain);
+      hGain.connect(gain);
+      osc.start(now);
+      oscNodes.push(osc);
+    });
+  } else {
+    const osc1 = ctx.createOscillator();
+    osc1.type = inst.osc1.type;
+    osc1.frequency.setValueAtTime(freq, now);
+    osc1.connect(gain);
+    osc1.start(now);
+    oscNodes.push(osc1);
 
-  activeNotes.set(midiNote, { osc1, osc2, gain, ctx });
+    if (inst.osc2) {
+      const osc2 = ctx.createOscillator();
+      osc2.type = inst.osc2.type;
+      osc2.frequency.setValueAtTime(freq, now);
+      if (inst.osc2.detune) osc2.detune.setValueAtTime(inst.osc2.detune, now);
+      const osc2Gain = ctx.createGain();
+      osc2Gain.gain.value = inst.osc2.volRatio;
+      osc2.connect(osc2Gain);
+      osc2Gain.connect(gain);
+      osc2.start(now);
+      oscNodes.push(osc2);
+    }
+  }
+
+  activeNotes.set(midiNote, { oscNodes, gain, ctx, releaseTime });
 }
 
 function stopNote(midiNote) {
@@ -677,15 +780,13 @@ function stopNote(midiNote) {
   if (!note) return;
   activeNotes.delete(midiNote);
 
-  const { osc1, osc2, gain, ctx } = note;
-  const releaseTime = 0.8;
+  const { oscNodes, gain, ctx, releaseTime } = note;
   const t = ctx.currentTime;
 
   gain.gain.cancelScheduledValues(t);
   gain.gain.setValueAtTime(gain.gain.value, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + releaseTime);
-  osc1.stop(t + releaseTime);
-  osc2.stop(t + releaseTime);
+  oscNodes.forEach(osc => osc.stop(t + releaseTime));
 }
 
 // =====================

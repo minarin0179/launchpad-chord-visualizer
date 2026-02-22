@@ -95,6 +95,7 @@ const state = {
   dimOthers: false,    // コードトーン以外を暗くする
   showInversion: false, // 転回形UIの表示
   scale: 'major',      // スケールタイプキー
+  instrument: 'piano', // 楽器プリセットキー（INSTRUMENTS のキー）
   midiOutput: null,    // 選択中のMIDI出力ポート
   midiAccess: null,    // MIDIAccessオブジェクト
 };
@@ -120,17 +121,35 @@ Major, Minor, Dom7, Maj7, Min7, Dim, Dim7, Aug, Half-Dim(m7b5), Sus2, Sus4, Add9
 
 Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Blues
 
+## 楽器一覧（6種）
+
+Synth, Piano, Organ, Guitar, Bass, Strings
+
 ---
 
 ## Web Audio シンセ仕様
 
-- **2オシレーター**: triangle波 + sine波（+6cent デチューン）
-- **エンベロープ（velocity 感応型）**:
-  - Attack: velocity 127 → 5ms / velocity 1 → 50ms（高いほど速い）
-  - Decay: 70ms でピークの50%へ
-  - Sustain: Note Off まで保持（自動リリースなし）
-  - Release: Note Off 後 0.8秒でフェードアウト
-- **velocity**: アタック時間とピーク音量の両方に影響
+楽器は `INSTRUMENTS` オブジェクトで定義されたプリセットから選択（UIの Sound ボタン）。
+
+### 楽器プリセット（6種）
+
+| キー | 名称 | 特徴 |
+|------|------|------|
+| `synth` | Synth | triangle+sine、velocity対応アタック（5〜50ms）、0.8秒リリース |
+| `piano` | Piano ★デフォルト | sine+triangle、自然減衰（2秒でほぼ消音）、鍵盤離し後0.3秒リリース |
+| `organ` | Organ | 第1〜4倍音の加算合成（sine×4）、即ON/OFF（0.04秒リリース） |
+| `guitar` | Guitar | sawtooth+lowpass(2500Hz)、超高速アタック→200ms急速減衰（プラック感） |
+| `bass` | Bass | sine+lowpass(600Hz)、サブオクターブ、パンチのある低音 |
+| `strings` | Strings | sawtooth×2（+5cent detune）+lowpass(1800Hz)、スロー・アタック（0.15〜0.4秒） |
+
+### 共通仕様
+- **プリセット構造**: `{ osc1, osc2?, harmonics?, envelope, peakVolFactor, filter? }`
+  - `harmonics` あり → 加算合成モード（Organ）
+  - `filter` あり → BiquadFilterNode をガインとdestinationの間に挿入
+- **エンベロープ**: `{ attackBase, attackVelRange, decayTime, sustainRatio, releaseTime }`
+  - attackTime = `attackBase + (1 - velocity/127) * attackVelRange`（高velocityほど速い）
+- **`activeNotes` Map**: `{ oscNodes[], gain, ctx, releaseTime }` を格納（従来の osc1/osc2 から変更）
+- velocity: アタック時間とピーク音量の両方に影響
 - ボリュームスライダーで調整
 - 画面パッドのクリックは velocity=80 固定
 
@@ -162,10 +181,11 @@ Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Bl
 4. Root選択（12音ボタン）
 5. Chord選択（17種ボタン）
 6. Scale選択（7種ボタン）
-7. 転回形選択（動的生成）
-8. Capo選択（◄ 数値表示 ► RST — 視覚パターン固定で半音単位移調）
-9. トグル: 暗転 / スケール表示 / 転回形
-10. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
-11. コード名・構成音・インターバル表示
-12. 凡例
-13. イベントログ
+7. Sound選択（6種ボタン — 楽器プリセット）
+8. 転回形選択（動的生成）
+9. Capo選択（◄ 数値表示 ► RST — 視覚パターン固定で半音単位移調）
+10. トグル: 暗転 / スケール表示 / 転回形
+11. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
+12. コード名・構成音・インターバル表示
+13. 凡例
+14. イベントログ
