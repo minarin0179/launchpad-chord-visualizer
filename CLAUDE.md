@@ -70,13 +70,13 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 - デフォルトのベースノート: **MIDI 36（C2）** = 左下パッド
 - `semitone = baseNote + row * 5 + col`
 
-### オクターブ/トランスポーズ（上段ボタン割当）
+### 上段ボタン割当
 | CC  | 機能 |
 |-----|------|
-| 91  | Octave Up (+12) |
-| 92  | Octave Down (-12) |
-| 93  | Transpose Down (-1) |
-| 94  | Transpose Up (+1) |
+| 91  | Octave Up (+12) — baseNoteを+12 |
+| 92  | Octave Down (-12) — baseNoteを-12 |
+| 93  | Capo Down (-1) — baseNoteとrootを同時に-1（視覚パターン固定で移調） |
+| 94  | Capo Up (+1) — baseNoteとrootを同時に+1（視覚パターン固定で移調） |
 | 95-98 | 未割当（将来用） |
 
 ---
@@ -85,8 +85,9 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 
 ```js
 const state = {
-  baseNote: 36,        // 左下パッドのMIDIノート番号（オクターブ/トランスポーズで変動）
+  baseNote: 36,        // 左下パッドのMIDIノート番号（オクターブ/Capoで変動）
   root: 0,             // ルート音のピッチクラス（0=C, 1=C#, ..., 11=B）
+  capo: 0,             // カポオフセット（半音数）— baseNoteとrootを同時にシフトした累積量
   chordType: 'maj',    // コードタイプキー
   inversion: 0,        // 転回形インデックス
   showScale: true,     // スケール表示ON/OFF
@@ -139,7 +140,9 @@ Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Bl
 | `sendToLaunchpad()` | SysEx RGBメッセージをLaunchpadに送信 |
 | `setupMIDIInput()` | MIDI入力リスナー設定（CC/Note振り分け） |
 | `playNote(midiNote, velocity?)` | Web Audioでシンセ音を再生 |
-| `rebuildPads()` | オクターブ/トランスポーズ後にパッドデータとDOMを更新 |
+| `shiftCapo(delta)` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
+| `updateCapoDisplay()` | Capo UIの数値表示を更新 |
+| `rebuildPads()` | オクターブ/Capo後にパッドデータとDOMを更新 |
 | `setProgrammerMode()` | SysExでProgrammerモードに切替 |
 
 ---
@@ -153,8 +156,9 @@ Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Bl
 5. Chord選択（17種ボタン）
 6. Scale選択（7種ボタン）
 7. 転回形選択（動的生成）
-8. トグル: 暗転 / スケール表示 / 転回形
-9. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
-10. コード名・構成音・インターバル表示
-11. 凡例
-12. イベントログ
+8. Capo選択（◄ 数値表示 ► RST — 視覚パターン固定で半音単位移調）
+9. トグル: 暗転 / スケール表示 / 転回形
+10. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
+11. コード名・構成音・インターバル表示
+12. 凡例
+13. イベントログ

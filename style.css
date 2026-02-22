@@ -146,6 +146,25 @@ header p {
 /* Inversion selector */
 #inversion-row { display: flex; gap: 4px; flex-wrap: wrap; }
 
+/* Capo display */
+#capo-display {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  min-width: 44px;
+  text-align: center;
+  background: var(--surface);
+  border-radius: 2px;
+  font-family: 'Space Mono', monospace;
+  transition: color 0.15s, border-color 0.15s;
+}
+#capo-display[data-nonzero="true"] {
+  color: #ffaa33;
+  border-color: #ffaa33;
+}
+
 /* Grid wrapper */
 .grid-wrapper {
   position: relative;

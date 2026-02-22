@@ -78,6 +78,7 @@ function buildPadData(baseNote) {
 const state = {
   baseNote: 36,   // C2 default — shifted by octave/transpose
   root: 0,
+  capo: 0,        // cumulative semitone shift via ◄/►
   chordType: 'maj',
   inversion: 0,
   showScale: true,
@@ -233,15 +234,31 @@ function shiftOctave(delta) {
   log(`Octave → ${noteName}${octave} (base=${state.baseNote})`, 'out');
 }
 
-function shiftTranspose(delta) {
+function shiftCapo(delta) {
   const newBase = state.baseNote + delta;
   if (newBase < 0 || newBase > 115) return;
   state.baseNote = newBase;
+  state.root = ((state.root + delta) % 12 + 12) % 12;
+  state.capo += delta;
+  state.inversion = 0;
+  // Sync root button active state
+  const btns = rootContainer.querySelectorAll('.btn');
+  btns.forEach((b, i) => b.classList.toggle('active', i === state.root));
   rebuildPads();
-  const noteName = NOTE_NAMES[state.baseNote % 12];
-  const octave = Math.floor(state.baseNote / 12) - 1;
-  log(`Transpose → ${noteName}${octave} (base=${state.baseNote})`, 'out');
+  updateCapoDisplay();
+  log(`Capo ${state.capo >= 0 ? '+' : ''}${state.capo} → ${NOTE_NAMES[state.root]} (base=${state.baseNote})`, 'out');
 }
+
+function updateCapoDisplay() {
+  const el = document.getElementById('capo-display');
+  const c = state.capo;
+  el.textContent = c === 0 ? '0' : (c > 0 ? `+${c}` : `${c}`);
+  el.dataset.nonzero = c !== 0 ? 'true' : 'false';
+}
+
+document.getElementById('capo-down').onclick  = () => shiftCapo(-1);
+document.getElementById('capo-up').onclick    = () => shiftCapo(+1);
+document.getElementById('capo-reset').onclick = () => shiftCapo(-state.capo);
 
 function rebuildPads() {
   pads = buildPadData(state.baseNote);
@@ -272,8 +289,8 @@ function handleTopRowPress(index) {
   switch (TOP_ROW_CCS[index]) {
     case CC_UP:    shiftOctave(+1); break;
     case CC_DOWN:  shiftOctave(-1); break;
-    case CC_LEFT:  shiftTranspose(-1); break;
-    case CC_RIGHT: shiftTranspose(+1); break;
+    case CC_LEFT:  shiftCapo(-1); break;
+    case CC_RIGHT: shiftCapo(+1); break;
     default:
       log(`Top row CC${TOP_ROW_CCS[index]} pressed`, 'in');
   }
