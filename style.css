@@ -295,6 +295,24 @@ header p {
   letter-spacing: 0.1em;
 }
 
+/* Detected chord display */
+#detected-chord {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  min-height: 20px;
+  letter-spacing: 0.08em;
+}
+.detected-label {
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 /* Legend */
 .legend {
   display: flex;
