@@ -42,7 +42,7 @@ export async function initMIDI(callbacks) {
     statusEl.textContent = 'MIDI access denied';
     statusEl.className = 'disconnected';
     hintEl.textContent = 'MIDI access was denied. Check the lock icon in the address bar to allow MIDI permission.';
-    hintEl.style.display = '';
+    hintEl.classList.remove('hidden');
     log('MIDI access denied: ' + e.message, 'err');
   }
 }
@@ -83,11 +83,11 @@ export function populateDevices(access) {
       + '· Another app (e.g. Ableton Live) may be holding the MIDI port exclusively (Windows)<br>'
       + '· Verify the USB cable is properly connected<br>'
       + '· Close other apps and press RESCAN';
-    hintEl.style.display = '';
+    hintEl.classList.remove('hidden');
   } else {
     statusEl.textContent = `Connected (${outputCount} device${outputCount > 1 ? 's' : ''})`;
     statusEl.className = 'connected';
-    hintEl.style.display = 'none';
+    hintEl.classList.add('hidden');
   }
 
   if (outputCount > 0) {

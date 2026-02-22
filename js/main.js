@@ -147,20 +147,20 @@ Object.entries(INSTRUMENTS).forEach(([key, val]) => {
 document.getElementById('toggle-chord').onclick = function() {
   state.showChord = !state.showChord;
   this.classList.toggle('active', state.showChord);
-  document.getElementById('chord-control').style.display = state.showChord ? '' : 'none';
+  document.getElementById('chord-control').classList.toggle('hidden', !state.showChord);
   updateAll();
 };
 document.getElementById('toggle-scale').onclick = function() {
   state.showScale = !state.showScale;
   this.classList.toggle('active', state.showScale);
-  document.getElementById('scale-control').style.display = state.showScale ? '' : 'none';
-  document.getElementById('scale-key-label').style.display = state.showScale ? '' : 'none';
+  document.getElementById('scale-control').classList.toggle('hidden', !state.showScale);
+  document.getElementById('scale-key-label').classList.toggle('hidden', !state.showScale);
   updateAll();
 };
 document.getElementById('toggle-inversion').onclick = function() {
   state.showInversion = !state.showInversion;
   this.classList.toggle('active', state.showInversion);
-  document.getElementById('inversion-control').style.display = state.showInversion ? '' : 'none';
+  document.getElementById('inversion-control').classList.toggle('hidden', !state.showInversion);
   updateAll();
 };
 

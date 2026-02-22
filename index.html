@@ -25,9 +25,9 @@
         <select id="device-select"><option value="">-- No MIDI device --</option></select>
         <button class="send-btn" id="rescan-btn">RESCAN</button>
         <button class="send-btn" id="send-btn" disabled>SEND</button>
-        <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>
+        <button class="send-btn" id="clear-btn" disabled>CLEAR</button>
       </div>
-      <div id="midi-hint" style="font-size:0.55rem;color:#555577;font-family:'Noto Sans JP',sans-serif;display:none">
+      <div id="midi-hint" class="hidden">
       </div>
     </div>
 
@@ -75,7 +75,7 @@
 
     <div id="detected-chord">
       <span class="detected-label">DETECTED</span>
-      <span id="detected-chord-names"><span style="color:var(--text-muted)">—</span></span>
+      <span id="detected-chord-names"><span class="detected-chord-empty">—</span></span>
     </div>
   </main>
 
@@ -83,7 +83,7 @@
   <aside class="panel-right">
     <div class="controls">
       <div class="control-group">
-        <label style="color: var(--root-color)">Root</label>
+        <label class="root-label">Root</label>
         <div class="btn-row" id="root-buttons"></div>
       </div>
       <div class="control-group">
@@ -106,7 +106,7 @@
         <button class="toggle-btn t-inversion" id="toggle-inversion">
           <span class="dot"></span>Inversion
         </button>
-        <div id="inversion-control" style="display:none">
+        <div id="inversion-control" class="hidden">
           <div id="inversion-row"></div>
         </div>
       </div>

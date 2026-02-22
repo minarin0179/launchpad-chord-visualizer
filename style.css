@@ -520,3 +520,32 @@ body {
   .toggle-row { justify-content: center; }
   .midi-row   { justify-content: center; }
 }
+
+/* ================================================================
+   Utility
+   ================================================================ */
+.hidden { display: none; }
+
+/* MIDI hint */
+#midi-hint {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* Clear button disabled override */
+#clear-btn:disabled {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+/* Root label */
+.control-group label.root-label {
+  color: var(--root-color);
+}
+
+/* Detected chord spans */
+.detected-chord-empty { color: var(--text-muted); }
+.detected-chord-name  { color: var(--text-muted); }
+.detected-chord-name.exact { color: var(--chord-color); }
+.detected-chord-sep   { color: var(--border); }

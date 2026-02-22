@@ -116,15 +116,14 @@ export function displayDetectedChords(matches) {
   if (!el) return;
 
   if (matches.length === 0) {
-    el.innerHTML = '<span style="color:var(--text-muted)">—</span>';
+    el.innerHTML = '<span class="detected-chord-empty">—</span>';
     return;
   }
 
   const html = matches.map(m => {
     const name = NOTE_NAMES[m.root] + m.typeDef.symbol + (m.bassText ? '/' + m.bassText : '');
-    const color = m.isExact ? 'var(--chord-color)' : 'var(--text-muted)';
-    return `<span style="color:${color}">${name}</span>`;
-  }).join('<span style="color:var(--border)"> / </span>');
+    return `<span class="detected-chord-name${m.isExact ? ' exact' : ''}">${name}</span>`;
+  }).join('<span class="detected-chord-sep"> / </span>');
 
   el.innerHTML = html;
 }
