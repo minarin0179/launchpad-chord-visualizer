@@ -7,7 +7,6 @@
   --root-color: #ff4466;
   --chord-color: #33ddff;
   --scale-color: #44ff99;
-  --dim-color: #000;
   --text: #e0e0f0;
   --text-muted: #555577;
   --accent: #ff4466;
@@ -68,11 +67,9 @@ header p {
 /* Controls */
 .controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 16px;
-  justify-content: center;
   width: 100%;
-  max-width: 720px;
 }
 
 .control-group {
@@ -118,7 +115,7 @@ header p {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .toggle-btn {
   font-size: 0.65rem;
@@ -139,8 +136,8 @@ header p {
 .toggle-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.15s; }
 .toggle-btn.active .dot { background: currentColor; }
 .toggle-btn.active { color: var(--text); border-color: currentColor; }
+.toggle-btn.t-chord.active { color: var(--chord-color); }
 .toggle-btn.t-scale.active { color: var(--scale-color); }
-.toggle-btn.t-dim.active { color: #8888aa; }
 .toggle-btn.t-inversion.active { color: #ffaa33; }
 
 /* Inversion selector */
@@ -169,7 +166,6 @@ header p {
 .grid-wrapper {
   position: relative;
   width: 100%;
-  max-width: 560px;
 }
 
 #scale-key-label {
@@ -214,10 +210,6 @@ header p {
   font-family: 'Space Mono', monospace;
   pointer-events: none;
   line-height: 1;
-}
-.pad.dim {
-  background: var(--dim-color) !important;
-  box-shadow: none !important;
 }
 .pad.root {
   background: var(--root-color);
@@ -287,7 +279,7 @@ header p {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .legend-item {
   display: flex;
@@ -340,7 +332,7 @@ header p {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .pad.pressed {
@@ -400,7 +392,6 @@ header p {
 
 #log {
   width: 100%;
-  max-width: 560px;
   height: 120px;
   background: #06060c;
   border: 1px solid var(--border);
@@ -415,3 +406,74 @@ header p {
 #log .log-in  { color: var(--chord-color); }
 #log .log-out { color: var(--scale-color); }
 #log .log-err { color: #ff6644; }
+
+/* ================================================================
+   Three-column layout
+   ================================================================ */
+
+body {
+  align-items: center;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(380px, 1fr) minmax(220px, 280px);
+  gap: 20px 28px;
+  width: 100%;
+  max-width: 1160px;
+  align-items: start;
+}
+
+/* Left panel */
+.panel-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Center panel */
+.panel-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Right panel */
+.panel-right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Section block in right panel */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-label {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-section--log #log {
+  height: 160px;
+}
+
+/* Responsive: collapse to single column below 860px */
+@media (max-width: 860px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+  .panel-left  { order: 2; }
+  .panel-center { order: 1; }
+  .panel-right { order: 3; }
+  .toggle-row { justify-content: center; }
+  .midi-row   { justify-content: center; }
+}

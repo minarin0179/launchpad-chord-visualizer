@@ -92,8 +92,8 @@ const state = {
   capo: 0,             // カポオフセット（半音数）— baseNoteとrootを同時にシフトした累積量
   chordType: 'maj',    // コードタイプキー
   inversion: 0,        // 転回形インデックス
+  showChord: true,     // コードトーン表示ON/OFF（ルート音は常時表示）
   showScale: true,     // スケール表示ON/OFF
-  dimOthers: false,    // コードトーン以外を暗くする
   showInversion: false, // 転回形UIの表示
   scale: 'major',      // スケールタイプキー
   instrument: 'piano', // 楽器プリセットキー（INSTRUMENTS のキー）
@@ -110,10 +110,9 @@ const state = {
 | 種別 | 画面CSS | Launchpad RGB |
 |------|---------|---------------|
 | ルート音 | `--root-color` (#ff4466) | [127, 0, 40] |
-| コードトーン | `--chord-color` (#33ddff) | [0, 100, 127] |
-| スケール音 | `--scale-color` (#44ff99) | [0, 127, 60] |
+| コードトーン（`showChord`=true時） | `--chord-color` (#33ddff) | [0, 100, 127] |
+| スケール音（`showScale`=true時） | `--scale-color` (#44ff99) | [0, 127, 60] |
 | その他 | off (#000) | [0, 0, 0] |
-| 暗転 | dim (#000) | [0, 0, 0] |
 | 上段ボタン(機能あり) | — | [60, 30, 0] (orange) |
 | ロゴ（接続中） | — | [0, 100, 0] (green) |
 | ロゴ（メトロノームアクセント拍） | — | [127, 127, 127] (white) |
@@ -209,20 +208,31 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 
 ---
 
-## UI構成（上から順）
+## UI構成（三段組レイアウト）
 
-1. ヘッダー + MIDIステータス
-2. デバイス選択 / RESCAN / SEND / CLEAR
-3. ボリュームスライダー
-4. メトロノーム（BPMスライダー + 数値入力 + START/STOPボタン）
-5. Root選択（12音ボタン）
-6. Chord選択（17種ボタン）
-7. Scale選択（7種ボタン）
-8. Sound選択（6種ボタン — 楽器プリセット）
-9. 転回形選択（動的生成）
-10. Capo選択（◄ 数値表示 ► RST — 視覚パターン固定で半音単位移調）
-11. トグル: 暗転 / スケール表示 / 転回形
-12. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
-13. コード名・構成音・インターバル表示
-14. 凡例
-15. イベントログ
+上段（全幅）: ヘッダー + MIDIステータス
+
+### 左パネル（MIDI / Audio / Debug）
+1. Device — デバイス選択 / RESCAN / SEND / CLEAR
+2. Volume — ボリュームスライダー
+3. Metronome — BPMスライダー + 数値入力 + START/STOPボタン
+4. Sound — 楽器プリセット選択（6種）
+5. Log — イベントログ
+
+### 中央パネル（Launchpad）
+6. 9x9パッドグリッド（上段CC + 右列 + 8x8メイン）
+7. コード名・構成音・インターバル表示
+
+### 右パネル（Chord Controls）
+8. Root — 12音ボタン（ラベル色 = `--root-color`、常時表示）
+9. Chord（トグルボタン兼ラベル、active色 = `--chord-color`）— コードタイプ17種
+10. Scale（トグルボタン兼ラベル、active色 = `--scale-color`）— スケール種別7種
+11. Inversion（トグルボタン兼ラベル）— 転回形選択（動的生成）/ ON時のみ展開
+12. Capo — ◄ 数値表示 ► RST（視覚パターン固定で半音単位移調）
+
+### トグルの挙動
+| トグル | 対象ラベル要素 | OFF時の動作 |
+|--------|----------------|-------------|
+| Chord | `#toggle-chord`（青） | コードトーン非表示（ルート音は常時表示） / `chord-control` 非表示 |
+| Scale | `#toggle-scale`（緑） | スケール音非表示 / `scale-control` + `scale-key-label` 非表示 |
+| Inversion | `#toggle-inversion` | `inversion-control` 非表示（トグルボタン自体は常時表示） |

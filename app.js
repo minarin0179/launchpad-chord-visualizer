@@ -135,8 +135,8 @@ const state = {
   capo: 0,        // cumulative semitone shift via ◄/►
   chordType: 'maj',
   inversion: 0,
+  showChord: true,
   showScale: true,
-  dimOthers: false,
   showInversion: false,
   scale: 'major',
   instrument: 'piano',
@@ -206,9 +206,10 @@ function setActive(container, activeBtn) {
 // =====================
 // DOM: Toggles
 // =====================
-document.getElementById('toggle-dim').onclick = function() {
-  state.dimOthers = !state.dimOthers;
-  this.classList.toggle('active', state.dimOthers);
+document.getElementById('toggle-chord').onclick = function() {
+  state.showChord = !state.showChord;
+  this.classList.toggle('active', state.showChord);
+  document.getElementById('chord-control').style.display = state.showChord ? '' : 'none';
   updateAll();
 };
 document.getElementById('toggle-scale').onclick = function() {
@@ -424,12 +425,12 @@ function updateAll() {
     el.className = 'pad';
     if (isRoot) {
       el.classList.add('root');
-    } else if (isChord) {
+    } else if (state.showChord && isChord) {
       el.classList.add('chord');
     } else if (state.showScale && isScale) {
       el.classList.add('scale-only');
     } else {
-      el.classList.add(state.dimOthers ? 'dim' : 'off');
+      el.classList.add('off');
     }
   });
 
@@ -470,7 +471,6 @@ const COLORS = {
   chord: [0, 100, 127],
   scale: [0, 127, 60],
   off:   [0, 0, 0],
-  dim:   [0, 0, 0],
 };
 
 // =====================
@@ -720,9 +720,9 @@ function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
 
     let color;
     if (isRoot)                          color = COLORS.root;
-    else if (isChord)                    color = COLORS.chord;
+    else if (state.showChord && isChord) color = COLORS.chord;
     else if (state.showScale && isScale) color = COLORS.scale;
-    else                                 color = state.dimOthers ? COLORS.dim : COLORS.off;
+    else                                 color = COLORS.off;
 
     data.push(0x03, pad.launchpadNote, color[0], color[1], color[2]);
   });

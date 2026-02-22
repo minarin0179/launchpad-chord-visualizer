@@ -15,88 +15,110 @@
 
 <div id="midi-status" class="searching">MIDI を検索中...</div>
 
-<div class="midi-row">
-  <select id="device-select"><option value="">-- MIDI デバイスなし --</option></select>
-  <button class="send-btn" id="rescan-btn">RESCAN</button>
-  <button class="send-btn" id="send-btn" disabled>SEND</button>
-  <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>
-</div>
-<div class="volume-row">
-  <span>Vol</span>
-  <input type="range" id="volume" min="0" max="100" value="50">
-  <span id="volume-label">50%</span>
-</div>
-<div class="metro-row">
-  <span>BPM</span>
-  <input type="range" id="metro-bpm" min="40" max="240" value="120" step="1">
-  <input type="number" id="metro-bpm-num" min="40" max="240" value="120">
-  <button class="btn" id="metro-btn">▶ START</button>
-</div>
-<div id="midi-hint" style="font-size:0.55rem;color:#555577;font-family:'Noto Sans JP',sans-serif;text-align:center;max-width:500px;display:none">
-</div>
+<div class="app-layout">
 
-<div class="controls">
-  <div class="control-group">
-    <label>Root</label>
-    <div class="btn-row" id="root-buttons"></div>
-  </div>
-  <div class="control-group">
-    <label>Chord</label>
-    <div class="btn-row" id="chord-buttons"></div>
-  </div>
-  <div class="control-group" id="scale-control">
-    <label>Scale</label>
-    <div class="btn-row" id="scale-buttons"></div>
-  </div>
-  <div class="control-group">
-    <label>Sound</label>
-    <div class="btn-row" id="instrument-buttons"></div>
-  </div>
-  <div class="control-group" id="inversion-control" style="display:none">
-    <label>Inversion</label>
-    <div id="inversion-row"></div>
-  </div>
-  <div class="control-group">
-    <label>Capo</label>
-    <div class="btn-row">
-      <button class="btn" id="capo-down">◄</button>
-      <span id="capo-display">0</span>
-      <button class="btn" id="capo-up">►</button>
-      <button class="btn" id="capo-reset">RST</button>
+  <!-- Left: MIDI / Audio / Debug -->
+  <aside class="panel-left">
+    <div class="panel-section">
+      <div class="panel-label">Device</div>
+      <div class="midi-row">
+        <select id="device-select"><option value="">-- MIDI デバイスなし --</option></select>
+        <button class="send-btn" id="rescan-btn">RESCAN</button>
+        <button class="send-btn" id="send-btn" disabled>SEND</button>
+        <button class="send-btn" id="clear-btn" disabled style="border-color:#555577;color:#555577">CLEAR</button>
+      </div>
+      <div id="midi-hint" style="font-size:0.55rem;color:#555577;font-family:'Noto Sans JP',sans-serif;display:none">
+      </div>
     </div>
-  </div>
-</div>
 
-<div class="toggle-row">
-  <button class="toggle-btn t-dim" id="toggle-dim">
-    <span class="dot"></span>コードトーン以外を暗く
-  </button>
-  <button class="toggle-btn t-scale active" id="toggle-scale">
-    <span class="dot"></span>スケール表示
-  </button>
-  <button class="toggle-btn t-inversion" id="toggle-inversion">
-    <span class="dot"></span>転回形
-  </button>
-</div>
+    <div class="panel-section">
+      <div class="panel-label">Volume</div>
+      <div class="volume-row">
+        <input type="range" id="volume" min="0" max="100" value="50">
+        <span id="volume-label">50%</span>
+      </div>
+    </div>
 
-<div class="grid-wrapper">
-  <div id="scale-key-label"></div>
-  <div class="grid" id="pad-grid"></div>
-</div>
+    <div class="panel-section">
+      <div class="panel-label">Metronome</div>
+      <div class="metro-row">
+        <span>BPM</span>
+        <input type="range" id="metro-bpm" min="40" max="240" value="120" step="1">
+        <input type="number" id="metro-bpm-num" min="40" max="240" value="120">
+        <button class="btn" id="metro-btn">▶ START</button>
+      </div>
+    </div>
 
-<div id="chord-display">
-  <div id="chord-name">&mdash;</div>
-  <div id="chord-notes"></div>
-  <div id="chord-interval"></div>
-</div>
+    <div class="panel-section">
+      <div class="panel-label">Sound</div>
+      <div class="btn-row" id="instrument-buttons"></div>
+    </div>
 
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:var(--root-color);color:var(--root-color)"></div>Root</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--chord-color);color:var(--chord-color)"></div>Chord Tone</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--scale-color);color:var(--scale-color)"></div>Scale Tone</div>
-</div>
+    <div class="panel-section panel-section--log">
+      <div class="panel-label">Log</div>
+      <div id="log"></div>
+    </div>
+  </aside>
 
-<div id="log"></div>
+  <!-- Center: Launchpad -->
+  <main class="panel-center">
+    <div class="grid-wrapper">
+      <div id="scale-key-label"></div>
+      <div class="grid" id="pad-grid"></div>
+    </div>
+
+    <div id="chord-display">
+      <div id="chord-name">&mdash;</div>
+      <div id="chord-notes"></div>
+      <div id="chord-interval"></div>
+    </div>
+  </main>
+
+  <!-- Right: Chord Controls -->
+  <aside class="panel-right">
+    <div class="controls">
+      <div class="control-group">
+        <label style="color: var(--root-color)">Root</label>
+        <div class="btn-row" id="root-buttons"></div>
+      </div>
+      <div class="control-group">
+        <button class="toggle-btn t-chord active" id="toggle-chord">
+          <span class="dot"></span>Chord
+        </button>
+        <div id="chord-control">
+          <div class="btn-row" id="chord-buttons"></div>
+        </div>
+      </div>
+      <div class="control-group">
+        <button class="toggle-btn t-scale active" id="toggle-scale">
+          <span class="dot"></span>Scale
+        </button>
+        <div id="scale-control">
+          <div class="btn-row" id="scale-buttons"></div>
+        </div>
+      </div>
+      <div class="control-group">
+        <button class="toggle-btn t-inversion" id="toggle-inversion">
+          <span class="dot"></span>Inversion
+        </button>
+        <div id="inversion-control" style="display:none">
+          <div id="inversion-row"></div>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Capo</label>
+        <div class="btn-row">
+          <button class="btn" id="capo-down">◄</button>
+          <span id="capo-display">0</span>
+          <button class="btn" id="capo-up">►</button>
+          <button class="btn" id="capo-reset">RST</button>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</div>
 
 <script src="app.js"></script>
 </body>
