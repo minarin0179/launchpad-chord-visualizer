@@ -1,0 +1,363 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --border: #1e1e2e;
+  --root-color: #ff4466;
+  --chord-color: #33ddff;
+  --scale-color: #44ff99;
+  --dim-color: #000;
+  --text: #e0e0f0;
+  --text-muted: #555577;
+  --accent: #ff4466;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px;
+  gap: 24px;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+  pointer-events: none;
+  z-index: 100;
+}
+
+header { text-align: center; letter-spacing: 0.15em; }
+header h1 {
+  font-size: clamp(1.1rem, 3vw, 1.4rem);
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+header p {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* MIDI status */
+#midi-status {
+  font-size: 0.65rem;
+  padding: 6px 14px;
+  border-radius: 2px;
+  border: 1px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.3s;
+}
+#midi-status.connected { border-color: var(--scale-color); color: var(--scale-color); }
+#midi-status.disconnected { border-color: #ff6644; color: #ff6644; }
+#midi-status.searching { border-color: var(--text-muted); color: var(--text-muted); }
+
+/* Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  width: 100%;
+  max-width: 720px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.control-group label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+.control-group .btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.btn:hover { border-color: var(--accent); color: var(--text); }
+.btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 700;
+}
+
+/* Toggle buttons */
+.toggle-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.toggle-btn {
+  font-size: 0.65rem;
+  padding: 5px 12px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toggle-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.15s; }
+.toggle-btn.active .dot { background: currentColor; }
+.toggle-btn.active { color: var(--text); border-color: currentColor; }
+.toggle-btn.t-scale.active { color: var(--scale-color); }
+.toggle-btn.t-dim.active { color: #8888aa; }
+.toggle-btn.t-inversion.active { color: #ffaa33; }
+
+/* Inversion selector */
+#inversion-row { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* Grid wrapper */
+.grid-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+}
+
+#scale-key-label {
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+  min-height: 1em;
+}
+
+/* Launchpad grid — 9x9 with surrounding buttons */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  gap: 4px;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #0c0c14;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  box-shadow: 0 0 40px rgba(255,68,102,0.05);
+}
+
+.pad {
+  border-radius: 3px;
+  aspect-ratio: 1;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.12s, box-shadow 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.pad::after {
+  content: attr(data-note);
+  font-size: clamp(0.4rem, 1.2vw, 0.6rem);
+  color: rgba(255,255,255,0.25);
+  font-family: 'Space Mono', monospace;
+  pointer-events: none;
+  line-height: 1;
+}
+.pad.dim {
+  background: var(--dim-color) !important;
+  box-shadow: none !important;
+}
+.pad.root {
+  background: var(--root-color);
+  box-shadow: 0 0 12px var(--root-color), 0 0 4px var(--root-color);
+}
+.pad.root::after { color: rgba(0,0,0,0.6); }
+.pad.chord {
+  background: var(--chord-color);
+  box-shadow: 0 0 10px var(--chord-color);
+}
+.pad.chord::after { color: rgba(0,0,0,0.5); }
+.pad.scale-only {
+  background: var(--scale-color);
+  box-shadow: 0 0 8px var(--scale-color);
+}
+.pad.scale-only::after { color: rgba(0,0,0,0.4); }
+.pad.off {
+  background: #000;
+}
+.pad.fn-btn {
+  background: #1a1a28;
+  border-radius: 50%;
+  border: 1px solid #2a2a3a;
+}
+.pad.fn-btn::after {
+  font-size: clamp(0.35rem, 1vw, 0.5rem);
+  color: rgba(255,255,255,0.4);
+}
+.pad.fn-btn:hover { border-color: var(--accent); }
+.pad.fn-btn.fn-active {
+  background: #ff9933;
+  box-shadow: 0 0 8px #ff9933;
+}
+.pad.fn-btn.fn-active::after { color: rgba(0,0,0,0.6); }
+.pad.fn-corner { visibility: hidden; }
+
+/* Current chord display */
+#chord-display {
+  text-align: center;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+#chord-name {
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  transition: all 0.2s;
+}
+#chord-notes {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+}
+#chord-interval {
+  font-size: 0.58rem;
+  color: #444466;
+  letter-spacing: 0.1em;
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* MIDI device row */
+#device-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  padding: 6px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  max-width: 260px;
+}
+
+.send-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  padding: 8px 20px;
+  cursor: pointer;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.15s;
+}
+.send-btn:hover { background: var(--accent); color: #000; }
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.send-btn:disabled:hover { background: transparent; color: var(--accent); }
+
+.midi-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pad.pressed {
+  filter: brightness(1.8);
+  transform: scale(0.92);
+  transition: none;
+}
+
+.volume-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.volume-row input[type="range"] {
+  width: 100px;
+  accent-color: var(--accent);
+}
+
+#log {
+  width: 100%;
+  max-width: 560px;
+  height: 120px;
+  background: #06060c;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+#log .log-in  { color: var(--chord-color); }
+#log .log-out { color: var(--scale-color); }
+#log .log-err { color: #ff6644; }
