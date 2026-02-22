@@ -268,9 +268,10 @@ function buildGridDOM() {
         e.preventDefault();
         startNote(pad.semitone, 80);
         el.classList.add('pressed');
+        flashPressedPad(pad, true);
       };
-      el.onpointerup = () => { stopNote(pad.semitone); el.classList.remove('pressed'); };
-      el.onpointerleave = () => { stopNote(pad.semitone); el.classList.remove('pressed'); };
+      el.onpointerup = () => { stopNote(pad.semitone); el.classList.remove('pressed'); flashPressedPad(pad, false); };
+      el.onpointerleave = () => { stopNote(pad.semitone); el.classList.remove('pressed'); flashPressedPad(pad, false); };
       gridEl.appendChild(el);
       padEls[padIdx] = el;
     }
@@ -344,9 +345,10 @@ function rebuildPads() {
         e.preventDefault();
         startNote(pad.semitone, 80);
         padEls[idx].classList.add('pressed');
+        flashPressedPad(pad, true);
       };
-      padEls[idx].onpointerup = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); };
-      padEls[idx].onpointerleave = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); };
+      padEls[idx].onpointerup = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); flashPressedPad(pad, false); };
+      padEls[idx].onpointerleave = () => { stopNote(pad.semitone); padEls[idx].classList.remove('pressed'); flashPressedPad(pad, false); };
     }
   });
   updateBaseNoteDisplay();
@@ -472,11 +474,12 @@ function updateAll() {
 
 // Launchpad X RGB SysEx colors (0-127)
 const COLORS = {
-  root:  [127, 0, 40],
-  chord: [0, 100, 127],
-  scale: [0, 127, 60],
-  bass:  [127, 80, 0],
-  off:   [0, 0, 0],
+  root:    [127, 0, 40],
+  chord:   [0, 100, 127],
+  scale:   [0, 127, 60],
+  bass:    [127, 80, 0],
+  off:     [0, 0, 0],
+  pressed: [127, 127, 127],  // white flash on press
 };
 
 // =====================
@@ -710,6 +713,45 @@ function stopMetronome() {
   btn.textContent = '▶ START';
   updateLogoLED();
   log('Metronome OFF', 'out');
+}
+
+// Returns the LED color array for a pad's pitchClass based on current state
+function getPadLEDColor(pitchClass) {
+  const chordPCs = getChordPitchClasses();
+  const scalePCs = getScalePitchClasses();
+  const rootPC = state.root;
+  const bassPC = chordPCs.bassPC;
+  const pc = pitchClass;
+  const isRoot  = pc === rootPC && chordPCs.all.includes(pc);
+  const isBass  = bassPC !== null && pc === bassPC;
+  const isChord = chordPCs.all.includes(pc);
+  const isScale = scalePCs.includes(pc);
+  if (isRoot)                          return COLORS.root;
+  else if (state.showChord && isBass)  return COLORS.bass;
+  else if (state.showChord && isChord) return COLORS.chord;
+  else if (state.showScale && isScale) return COLORS.scale;
+  else                                 return COLORS.off;
+}
+
+// Sends a single-pad LED update via SysEx
+function sendPadLED(launchpadNote, r, g, b) {
+  if (!state.midiOutput) return;
+  try {
+    state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03,
+                           0x03, launchpadNote, r, g, b,
+                           0xF7]);
+  } catch(e) {}
+}
+
+// Flashes a pad white on press; restores its state color on release
+function flashPressedPad(pad, isPressed) {
+  if (!state.midiOutput) return;
+  if (isPressed) {
+    sendPadLED(pad.launchpadNote, ...COLORS.pressed);
+  } else {
+    const [r, g, b] = getPadLEDColor(pad.pitchClass);
+    sendPadLED(pad.launchpadNote, r, g, b);
+  }
 }
 
 function sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC) {
@@ -955,6 +997,7 @@ function setupMIDIInput(access) {
           const padIdx = pads.findIndex(p => p.launchpadNote === data1);
           if (padIdx >= 0 && padEls[padIdx]) {
             padEls[padIdx].classList.remove('pressed');
+            flashPressedPad(pads[padIdx], false);
           }
         }
         return;
@@ -984,6 +1027,7 @@ function setupMIDIInput(access) {
           const padIdx = pads.findIndex(p => p.launchpadNote === data1);
           if (padIdx >= 0 && padEls[padIdx]) {
             padEls[padIdx].classList.add('pressed');
+            flashPressedPad(pads[padIdx], true);
           }
         }
         return;
