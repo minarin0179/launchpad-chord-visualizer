@@ -743,14 +743,15 @@ function sendPadLED(launchpadNote, r, g, b) {
   } catch(e) {}
 }
 
-// Flashes a pad white on press; restores its state color on release
+// Flashes all pads sharing the same pitch class white on press; restores on release
 function flashPressedPad(pad, isPressed) {
   if (!state.midiOutput) return;
+  const samePCs = pads.filter(p => p.semitone === pad.semitone);
   if (isPressed) {
-    sendPadLED(pad.launchpadNote, ...COLORS.pressed);
+    samePCs.forEach(p => sendPadLED(p.launchpadNote, ...COLORS.pressed));
   } else {
     const [r, g, b] = getPadLEDColor(pad.pitchClass);
-    sendPadLED(pad.launchpadNote, r, g, b);
+    samePCs.forEach(p => sendPadLED(p.launchpadNote, r, g, b));
   }
 }
 
