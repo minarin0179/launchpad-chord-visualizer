@@ -52,7 +52,8 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 - 上段CC・右列Noteのパッドも同じ方法でLED制御可能
 
 ### MIDI入力
-- 8x8グリッド: `0x90 <note> <velocity>`（Note On, ch1）
+- 8x8グリッド Note On: `0x90 <note> <velocity>`（ch1）→ サステイン開始
+- 8x8グリッド Note Off: `0x80 <note> 0` または `0x90 <note> 0`（ch1）→ リリース開始
 - 上段ボタン: `0xB0 <cc> <value>`（CC, ch1）
 - 右列ボタン: `0xB0 <cc> <value>`（CC, ch1）— CC 89,79,...,19
 
@@ -124,9 +125,14 @@ Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Bl
 ## Web Audio シンセ仕様
 
 - **2オシレーター**: triangle波 + sine波（+6cent デチューン）
-- **ADSR風エンベロープ**: Attack 10ms → Decay 70ms → Sustain 0.5 → Release 1.2s
-- ベロシティ対応（MIDI入力時）
+- **エンベロープ（velocity 感応型）**:
+  - Attack: velocity 127 → 5ms / velocity 1 → 50ms（高いほど速い）
+  - Decay: 70ms でピークの50%へ
+  - Sustain: Note Off まで保持（自動リリースなし）
+  - Release: Note Off 後 0.8秒でフェードアウト
+- **velocity**: アタック時間とピーク音量の両方に影響
 - ボリュームスライダーで調整
+- 画面パッドのクリックは velocity=80 固定
 
 ---
 
@@ -138,8 +144,9 @@ Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Bl
 | `buildGridDOM()` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
 | `updateAll()` | 画面更新 + Launchpad LED送信の中心関数 |
 | `sendToLaunchpad()` | SysEx RGBメッセージをLaunchpadに送信 |
-| `setupMIDIInput()` | MIDI入力リスナー設定（CC/Note振り分け） |
-| `playNote(midiNote, velocity?)` | Web Audioでシンセ音を再生 |
+| `setupMIDIInput()` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
+| `startNote(midiNote, velocity?)` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録） |
+| `stopNote(midiNote)` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
 | `shiftCapo(delta)` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
 | `updateCapoDisplay()` | Capo UIの数値表示を更新 |
 | `rebuildPads()` | オクターブ/Capo後にパッドデータとDOMを更新 |
