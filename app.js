@@ -142,6 +142,10 @@ const state = {
   instrument: 'piano',
   midiOutput: null,
   midiAccess: null,
+  bpm: 120,
+  metronome: false,
+  _metroTimer: null,
+  _metroBeat: 0,
 };
 
 let pads = buildPadData(state.baseNote);
@@ -500,6 +504,8 @@ async function initMIDI() {
       console.log('MIDI state change:', e.port.name, e.port.state);
       populateDevices(access);
       setupMIDIInput(access);
+      if (!state.midiOutput) stopMetronome();
+      updateLogoLED();
     };
   } catch(e) {
     statusEl.textContent = 'MIDI アクセス拒否';
@@ -580,6 +586,8 @@ document.getElementById('rescan-btn').onclick = async () => {
       console.log('MIDI state change:', e.port.name, e.port.state);
       populateDevices(access);
       setupMIDIInput(access);
+      if (!state.midiOutput) stopMetronome();
+      updateLogoLED();
     };
   } catch(e) {
     statusEl.textContent = 'MIDI アクセス拒否';
@@ -598,13 +606,15 @@ function onDeviceSelect() {
       document.getElementById('send-btn').disabled = false;
       document.getElementById('clear-btn').disabled = false;
       setProgrammerMode();
-      setTimeout(() => updateAll(), 100);
+      setTimeout(() => { updateAll(); updateLogoLED(); }, 150);
     } else {
+      stopMetronome();
       state.midiOutput = null;
       document.getElementById('send-btn').disabled = true;
       document.getElementById('clear-btn').disabled = true;
     }
   } else {
+    stopMetronome();
     state.midiOutput = null;
     document.getElementById('send-btn').disabled = true;
     document.getElementById('clear-btn').disabled = true;
@@ -615,6 +625,85 @@ function setProgrammerMode() {
   if (!state.midiOutput) return;
   state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7]);
   log('SysEx → Programmer Mode', 'out');
+}
+
+// =====================
+// Logo LED (pad 99)
+// =====================
+function sendLogoLED(r, g, b) {
+  if (!state.midiOutput) return;
+  try {
+    state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03,
+                           0x03, 99, r, g, b,
+                           0xF7]);
+  } catch(e) {}
+}
+
+function updateLogoLED() {
+  if (!state.midiOutput) { sendLogoLED(0, 0, 0); return; }
+  sendLogoLED(0, 100, 0); // 接続中: 緑
+}
+
+// =====================
+// Metronome
+// =====================
+function playMetronomeClick(isAccent) {
+  const ctx = getAudioCtx();
+  const freq  = isAccent ? 1200 : 700;
+  const vol   = isAccent ? 0.35 : 0.18;
+  const decay = isAccent ? 0.055 : 0.04;
+
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(vol, now + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+
+  osc.start(now);
+  osc.stop(now + decay + 0.01);
+}
+
+function metronomeBeat() {
+  const isAccent = state._metroBeat === 0;
+  state._metroBeat = (state._metroBeat + 1) % 4;
+
+  // LED: アクセント拍は明るい白、通常拍はやや青白い
+  sendLogoLED(isAccent ? 127 : 60, isAccent ? 127 : 80, isAccent ? 127 : 100);
+  setTimeout(() => {
+    if (state.midiOutput) sendLogoLED(0, 100, 0);
+  }, 80);
+
+  playMetronomeClick(isAccent);
+}
+
+function startMetronome() {
+  if (state._metroTimer) clearInterval(state._metroTimer);
+  state._metroBeat = 0;
+  const ms = (60 / state.bpm) * 1000;
+  metronomeBeat();
+  state._metroTimer = setInterval(metronomeBeat, ms);
+  state.metronome = true;
+  const btn = document.getElementById('metro-btn');
+  btn.classList.add('active');
+  btn.textContent = '■ STOP';
+  log(`Metronome ON — ${state.bpm} BPM`, 'out');
+}
+
+function stopMetronome() {
+  if (state._metroTimer) { clearInterval(state._metroTimer); state._metroTimer = null; }
+  state.metronome = false;
+  const btn = document.getElementById('metro-btn');
+  btn.classList.remove('active');
+  btn.textContent = '▶ START';
+  updateLogoLED();
+  log('Metronome OFF', 'out');
 }
 
 function sendToLaunchpad(chordPCs, scalePCs, rootPC) {
@@ -671,6 +760,7 @@ document.getElementById('clear-btn').onclick = () => {
   data.push(0xF7);
   try { state.midiOutput.send(data); } catch(e) {}
   log('All LEDs cleared', 'out');
+  updateLogoLED(); // パッド99は接続インジケーター維持
 };
 
 // =====================
@@ -694,6 +784,25 @@ function getVolume() {
 
 document.getElementById('volume').oninput = function() {
   document.getElementById('volume-label').textContent = this.value + '%';
+};
+
+document.getElementById('metro-bpm').oninput = function() {
+  state.bpm = parseInt(this.value);
+  document.getElementById('metro-bpm-num').value = this.value;
+  if (state.metronome) startMetronome();
+};
+
+document.getElementById('metro-bpm-num').onchange = function() {
+  const v = Math.min(240, Math.max(40, parseInt(this.value) || 120));
+  this.value = v;
+  state.bpm = v;
+  document.getElementById('metro-bpm').value = v;
+  if (state.metronome) startMetronome();
+};
+
+document.getElementById('metro-btn').onclick = () => {
+  if (state.metronome) stopMetronome();
+  else if (state.midiOutput) startMetronome();
 };
 
 // semitone → { osc1, osc2, gain, ctx }
