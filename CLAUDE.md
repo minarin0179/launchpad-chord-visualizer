@@ -1,31 +1,6 @@
-# Launchpad X Chord Visualizer
+# Launchpad X Chord Visualizer — 実装リファレンス
 
-コード名を選択するとLaunchpad XのパッドをRGBで光らせ、パッド押下で音を鳴らすWebアプリ。
-
-## プロジェクト構成
-
-- `index.html` — HTML構造のみ（`style.css` と `js/main.js` を外部参照）
-- `style.css` — 全スタイル定義
-- `js/` — ロジック（ES Modules で機能別に分割）
-  - `constants.js` — 音楽理論定数・楽器プリセット・グリッド定数・LED色・`buildPadData()`
-  - `state.js` — グローバル `state` オブジェクト・`pads` (live binding)・`setPads()`
-  - `logger.js` — `log()` 関数
-  - `audio.js` — Web Audio シンセ（`startNote` / `stopNote`）・メトロノームクリック音
-  - `music.js` — コード計算・スケール計算・コード自動検出・UI表示更新
-  - `led.js` — SysEx LED 制御（`sendToLaunchpad` / `flashPressedPad` / `clearAllLEDs`）
-  - `grid.js` — グリッド DOM 構築・カポ・オクターブ操作
-  - `midi.js` — MIDI デバイス管理・MIDI 入力ハンドリング
-  - `main.js` — エントリーポイント（`updateAll`・メトロノーム・ボタン生成・全体統合）
-- ビルドツール・フレームワークなし。**ローカルサーバー経由で使用**（Chrome推奨）
-
-## 技術スタック
-
-- **Web MIDI API** — SysEx有効（`requestMIDIAccess({ sysex: true })`）
-- **Web Audio API** — オシレーターベースのシンセ音源
-- **Vanilla JS / ES Modules** — フレームワーク依存なし（`import` / `export`）
-- **Google Fonts** — Space Mono / Noto Sans JP
-
-> **起動方法**: ES Modules は `file://` 不可。`python -m http.server 8080` や VS Code Live Server を使用。
+> ユーザー向けの概要・起動方法・使い方は README.md を参照。
 
 ---
 
@@ -36,7 +11,7 @@
 SysEx: F0 00 20 29 02 0C 0E 01 F7
 ```
 
-### パッド配置（Programmerモード）
+### パッド配置
 ```
 [CC91][CC92][CC93][CC94][CC95][CC96][CC97][CC98][Logo99] ← 上段（丸）CC + ロゴ
 [81]  [82]  [83]  [84]  [85]  [86]  [87]  [88]  [CC89]  ← 右端（丸）CC
@@ -52,7 +27,6 @@ SysEx: F0 00 20 29 02 0C 0E 01 F7
 - 上段8ボタン: **CC** 91〜98
 - 右列8ボタン: **CC** 89, 79, 69, 59, 49, 39, 29, 19（上から順）
 - **ロゴボタン（右上角）: パッド番号 99** — LEDのみ制御可能（MIDI入力なし）
-- ※右列はNote On送信のファームウェアもあるためコードでは両方をハンドル
 
 ### LED制御（RGB SysEx）
 ```
@@ -61,30 +35,21 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 - ヘッダ: `F0 00 20 29 02 0C 03`
 - 各LED: `03`（RGB指定タイプ） + パッド番号 + R(0-127) + G(0-127) + B(0-127)
 - 複数LEDを1つのSysExメッセージにまとめて送信可能
-- 上段CC・右列Noteのパッドも同じ方法でLED制御可能
+
+### グリッドレイアウト（Guitar / Perfect 4th方式）
+- `semitone = baseNote + row * 5 + col`
+- 各行は下から上へ +5半音（完全4度）、各列は左から右へ +1半音
+- デフォルトのベースノート: MIDI 36（C2）= 左下パッド
 
 ### MIDI入力
 - 8x8グリッド Note On: `0x90 <note> <velocity>`（ch1）→ サステイン開始
 - 8x8グリッド Note Off: `0x80 <note> 0` または `0x90 <note> 0`（ch1）→ リリース開始
 - 上段ボタン: `0xB0 <cc> <value>`（CC, ch1）
 - 右列ボタン: `0xB0 <cc> <value>`（CC, ch1）— CC 89,79,...,19
-
-### Windows固有の注意事項
-- **MIDIポートは排他的** — Ableton Live等が使用中はブラウザからアクセス不可
-- 認識しない場合: 他のDAWを閉じる → RESCANボタン
-
----
-
-## 音楽レイアウト
-
-### グリッド配置（ギター/Perfect 4th方式）
-- 各行は下から上へ **+5半音**（完全4度）ずつシフト
-- 各列は左から右へ **+1半音** ずつ
-- デフォルトのベースノート: **MIDI 36（C2）** = 左下パッド
-- `semitone = baseNote + row * 5 + col`
+- ※右列はNote On送信のファームウェアもあるためコードでは両方をハンドル
 
 ### 上段ボタン割当
-> 実装は `midi.js` → `handleTopRowPress(index)` → `shiftOctave(±12)` / `shiftCapo(±1)` 経由
+> 実装: `midi.js` → `handleTopRowPress(index)` → `shiftOctave(±12)` / `shiftCapo(±1)` 経由
 
 | CC  | 機能 |
 |-----|------|
@@ -145,7 +110,6 @@ const state = {
 | メトロノームON・通常拍（2〜4拍目） | 青白フラッシュ [60, 80, 100] → 80ms後に緑 |
 
 ### メトロノーム仕様
-- BPM範囲: 40〜240（スライダー + 数値入力の双方向同期）
 - 固定4拍子（`main.js` のモジュールスコープ変数 `_metroBeat` が 0〜3 を循環、state には含まれない）
 - アクセント拍（beat 0）: 1200Hz / 音量0.35 / 減衰55ms — **ぴ**
 - 通常拍（beat 1〜3）: 700Hz / 音量0.18 / 減衰40ms — **ぽ**
@@ -169,25 +133,9 @@ const state = {
 
 ---
 
-## コードタイプ一覧（17種）
-
-Major, Minor, Dom7, Maj7, Min7, Dim, Dim7, Aug, Half-Dim(m7b5), Sus2, Sus4, Add9, Dom9, Maj9, Min9, Maj6, Min6
-
-## スケール一覧（7種）
-
-Major, Natural Minor, Dorian, Mixolydian, Pentatonic Major, Pentatonic Minor, Blues
-
-## 楽器一覧（6種）
-
-Synth, Piano, Organ, Guitar, Bass, Strings
-
----
-
 ## Web Audio シンセ仕様
 
-楽器は `INSTRUMENTS` オブジェクトで定義されたプリセットから選択（UIの Sound ボタン）。
-
-### 楽器プリセット（6種）
+### 楽器プリセット（constants.js `INSTRUMENTS`）
 
 | キー | 名称 | 特徴 |
 |------|------|------|
@@ -201,13 +149,10 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 ### 共通仕様
 - **プリセット構造**: `{ osc1, osc2?, harmonics?, envelope, peakVolFactor, filter? }`
   - `harmonics` あり → 加算合成モード（Organ）
-  - `filter` あり → BiquadFilterNode をガインとdestinationの間に挿入
+  - `filter` あり → BiquadFilterNode をゲインとdestinationの間に挿入
 - **エンベロープ**: `{ attackBase, attackVelRange, decayTime, sustainRatio, releaseTime }`
   - attackTime = `attackBase + (1 - velocity/127) * attackVelRange`（高velocityほど速い）
-- **`activeNotes` Map**: `{ oscNodes[], gain, ctx, releaseTime }` を格納（従来の osc1/osc2 から変更）
-- velocity: アタック時間とピーク音量の両方に影響
-- ボリュームスライダーで調整
-- 画面パッドのクリックは velocity=80 固定
+- **`activeNotes` Map**: `{ oscNodes[], gain, ctx, releaseTime }` を格納
 
 ---
 
@@ -243,6 +188,40 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 
 ---
 
+## ファイル構成
+
+```
+index.html       HTML 構造
+style.css        スタイル
+js/
+  constants.js   音楽理論定数・楽器プリセット・グリッド定数・buildPadData()
+  state.js       グローバル state・pads (live binding)・setPads()
+  logger.js      log() 関数
+  audio.js       Web Audio シンセ・メトロノーム音
+  music.js       コード/スケール計算・コード自動検出
+  led.js         SysEx LED 制御
+  grid.js        グリッド DOM・カポ・オクターブ操作
+  midi.js        MIDI デバイス管理・入力ハンドリング
+  main.js        エントリーポイント・updateAll・メトロノーム・全体統合
+```
+
+### モジュール依存関係（循環なし）
+```
+constants → (none)
+state     → constants
+logger    → (none)
+audio     → constants, state
+music     → constants, state
+led       → constants, state, music, logger
+grid      → constants, state, logger
+midi      → constants, state, grid, logger
+main      → all
+```
+
+循環依存の回避は **コールバック注入** で行う（`main.js` が各モジュールにコールバックを渡す）。
+
+---
+
 ## UI構成（三段組レイアウト）
 
 上段（全幅）: ヘッダー + MIDIステータス
@@ -260,10 +239,10 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 
 ### 右パネル（Chord Controls）
 8. Root — 12音ボタン（ラベル色 = `--root-color`、active色 = `--root-color`、常時表示）
-9. Chord（トグルボタン兼ラベル、active色 = `--chord-color`）— コードタイプ17種（active色 = `--chord-color`）
-10. Scale（トグルボタン兼ラベル、active色 = `--scale-color`）— スケール種別7種（active色 = `--scale-color`）
-11. Inversion（トグルボタン兼ラベル、active色 = #ffaa33）— 転回形選択（動的生成）/ ON時のみ展開 / ラベル: Root / 1st / 2nd / 3rd / 4th（active色 = #ffaa33）
-12. Capo — ◄ 数値表示 ► RST（視覚パターン固定で半音単位移調）
+9. Chord（トグルボタン兼ラベル、active色 = `--chord-color`）— コードタイプ17種
+10. Scale（トグルボタン兼ラベル、active色 = `--scale-color`）— スケール種別7種
+11. Inversion（トグルボタン兼ラベル、active色 = #ffaa33）— 転回形選択（動的生成）/ ON時のみ展開 / ラベル: Root / 1st / 2nd / 3rd / 4th
+12. Capo — ◄ 数値表示 ► RST
 
 ### トグルの挙動
 | トグル | 対象ラベル要素 | OFF時の動作 |
