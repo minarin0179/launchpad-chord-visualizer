@@ -1,4 +1,4 @@
-import { INSTRUMENTS } from './constants.js';
+import { INSTRUMENTS, METRO_ACCENT, METRO_NORMAL, METRO_CLICK_RAMP_S } from './constants.js';
 import { state } from './state.js';
 
 // =====================
@@ -8,8 +8,10 @@ let audioCtx = null;
 const activeNotes = new Map(); // midiNote → { oscNodes, gain, ctx, releaseTime }
 
 export function getAudioCtx() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (!audioCtx) {
+    try { audioCtx = new AudioContext(); } catch(e) { console.error('AudioContext failed:', e); return null; }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
   return audioCtx;
 }
 
@@ -17,20 +19,18 @@ export function midiNoteToFreq(midiNote) {
   return 440 * Math.pow(2, (midiNote - 69) / 12);
 }
 
-export function getVolume() {
-  return parseInt(document.getElementById('volume').value) / 100;
-}
-
 export function getActiveNotes() {
   return activeNotes;
 }
 
 // onNoteChange: コールバック（detectChordFromActiveNotes を呼ぶ） — 循環依存回避のため注入
-export function startNote(midiNote, velocity = 64, onNoteChange) {
+// volume: 0.0〜1.0 の音量（getVolume() の結果を呼び出し元から渡す）
+export function startNote(midiNote, velocity = 64, volume = 0.5, onNoteChange) {
   stopNote(midiNote, onNoteChange); // retrigger: stop existing
 
   const ctx = getAudioCtx();
-  const vol = getVolume() * (velocity / 127);
+  if (!ctx) return;
+  const vol = volume * (velocity / 127);
   if (vol <= 0) return;
 
   const freq = midiNoteToFreq(midiNote);
@@ -123,9 +123,8 @@ export function stopNote(midiNote, onNoteChange) {
 // =====================
 export function playMetronomeClick(isAccent) {
   const ctx = getAudioCtx();
-  const freq  = isAccent ? 1200 : 700;
-  const vol   = isAccent ? 0.35 : 0.18;
-  const decay = isAccent ? 0.055 : 0.04;
+  if (!ctx) return;
+  const { freq, vol, decay } = isAccent ? METRO_ACCENT : METRO_NORMAL;
 
   const osc  = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -137,7 +136,7 @@ export function playMetronomeClick(isAccent) {
 
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(vol, now + 0.002);
+  gain.gain.linearRampToValueAtTime(vol, now + METRO_CLICK_RAMP_S);
   gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
 
   osc.start(now);

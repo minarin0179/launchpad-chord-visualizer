@@ -1,6 +1,8 @@
-import { NOTE_NAMES, TOP_ROW_CCS, RIGHT_COL_NOTES } from './constants.js';
+import { NOTE_NAMES, TOP_ROW_CCS, RIGHT_COL_NOTES,
+         PROGRAMMER_MODE_DELAY_MS, FN_ACTIVE_DURATION_MS, RIGHT_COL_NOTE_DURATION_MS } from './constants.js';
 import { state, pads } from './state.js';
 import { padEls, topRowEls, rightColEls } from './grid.js';
+import { setProgrammerMode } from './led.js';
 import { log } from './logger.js';
 
 // =====================
@@ -14,10 +16,10 @@ import { log } from './logger.js';
 //   onFlash(pad, isPressed),
 //   onTopRow(index), onRightCol(index)
 // }
-let _cbs = {};
+let _callbacks = {};
 
 export async function initMIDI(callbacks) {
-  _cbs = callbacks;
+  _callbacks = callbacks;
   const statusEl = document.getElementById('midi-status');
   const hintEl   = document.getElementById('midi-hint');
 
@@ -28,16 +30,7 @@ export async function initMIDI(callbacks) {
   }
   try {
     const access = await navigator.requestMIDIAccess({ sysex: true });
-    state.midiAccess = access;
-    populateDevices(access);
-    setupMIDIInput(access);
-    access.onstatechange = (e) => {
-      console.log('MIDI state change:', e.port.name, e.port.state);
-      populateDevices(access);
-      setupMIDIInput(access);
-      if (!state.midiOutput) _cbs.onStopMetronome?.();
-      _cbs.onUpdateLogoLED?.();
-    };
+    await _setupMIDIAccess(access);
   } catch(e) {
     statusEl.textContent = 'MIDI access denied';
     statusEl.className = 'disconnected';
@@ -45,6 +38,26 @@ export async function initMIDI(callbacks) {
     hintEl.classList.remove('hidden');
     log('MIDI access denied: ' + e.message, 'err');
   }
+}
+
+// MIDI アクセスのセットアップ（initMIDI / rescanMIDI から呼ぶ共通処理）
+async function _setupMIDIAccess(access) {
+  state.midiAccess = access;
+  populateDevices(access);
+  setupMIDIInput(access);
+  access.onstatechange = (e) => {
+    console.log('MIDI state change:', e.port.name, e.port.state);
+    populateDevices(access);
+    setupMIDIInput(access);
+    if (!state.midiOutput) _callbacks.onStopMetronome?.();
+    _callbacks.onUpdateLogoLED?.();
+  };
+}
+
+// RESCAN 用エクスポート（main.js の RESCAN ハンドラから呼ぶ）
+export async function rescanMIDI() {
+  const access = await navigator.requestMIDIAccess({ sysex: true });
+  await _setupMIDIAccess(access);
 }
 
 export function populateDevices(access) {
@@ -107,17 +120,16 @@ export function onDeviceSelect() {
       document.getElementById('send-btn').disabled = false;
       document.getElementById('clear-btn').disabled = false;
       // Programmer Mode に切替後、少し待ってから LED 更新
-      state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x0E, 0x01, 0xF7]);
-      log('SysEx → Programmer Mode', 'out');
-      setTimeout(() => { _cbs.onUpdateAll?.(); _cbs.onUpdateLogoLED?.(); }, 150);
+      setProgrammerMode();
+      setTimeout(() => { _callbacks.onUpdateAll?.(); _callbacks.onUpdateLogoLED?.(); }, PROGRAMMER_MODE_DELAY_MS);
     } else {
-      _cbs.onStopMetronome?.();
+      _callbacks.onStopMetronome?.();
       state.midiOutput = null;
       document.getElementById('send-btn').disabled = true;
       document.getElementById('clear-btn').disabled = true;
     }
   } else {
-    _cbs.onStopMetronome?.();
+    _callbacks.onStopMetronome?.();
     state.midiOutput = null;
     document.getElementById('send-btn').disabled = true;
     document.getElementById('clear-btn').disabled = true;
@@ -127,85 +139,76 @@ export function onDeviceSelect() {
 // =====================
 // MIDI Input (Launchpad → sound + control)
 // =====================
-function getLaunchpadSemitone(note) {
-  const pad = pads.find(p => p.launchpadNote === note);
-  return pad ? pad.semitone : undefined;
+
+// タイムアウト付きクラス付与（fn-active / pressed の付与・削除）
+function addTempClass(el, cls, ms) {
+  if (!el) return;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function handleCC(data1, data2) {
+  const ccIdx = TOP_ROW_CCS.indexOf(data1);
+  if (ccIdx >= 0) {
+    log(`CC IN: CC${data1} val=${data2} (top row)`, 'in');
+    _callbacks.onTopRow?.(ccIdx);
+    addTempClass(topRowEls[ccIdx], 'fn-active', FN_ACTIVE_DURATION_MS);
+    return;
+  }
+  const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
+  if (rcIdx >= 0) {
+    log(`CC IN: CC${data1} val=${data2} (right col)`, 'in');
+    _callbacks.onRightCol?.(rcIdx);
+    addTempClass(rightColEls[rcIdx], 'fn-active', FN_ACTIVE_DURATION_MS);
+    return;
+  }
+  log(`CC IN: CC${data1} val=${data2} (unknown)`, 'in');
+}
+
+function handleNoteOff(data1) {
+  const pad = pads.find(p => p.launchpadNote === data1);
+  if (!pad) return;
+  const padIdx = pad.row * 8 + pad.col;
+  _callbacks.onNoteOff?.(pad.semitone);
+  if (padEls[padIdx]) {
+    padEls[padIdx].classList.remove('pressed');
+    _callbacks.onFlash?.(pad, false);
+  }
+}
+
+function handleNoteOn(data1, data2) {
+  // Right column as Note (fallback — some firmware versions)
+  const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
+  if (rcIdx >= 0) {
+    log(`Right col IN: Note ${data1} vel=${data2}`, 'in');
+    _callbacks.onRightCol?.(rcIdx);
+    addTempClass(rightColEls[rcIdx], 'pressed', RIGHT_COL_NOTE_DURATION_MS);
+    return;
+  }
+
+  // Main 8x8 grid
+  const pad = pads.find(p => p.launchpadNote === data1);
+  if (!pad) return;
+  const padIdx = pad.row * 8 + pad.col;
+  const noteName = NOTE_NAMES[pad.pitchClass];
+  const octave = Math.floor(pad.semitone / 12) - 1;
+  log(`Pad IN: note=${data1} → ${noteName}${octave} vel=${data2}`, 'in');
+  _callbacks.onNoteOn?.(pad.semitone, data2);
+  if (padEls[padIdx]) {
+    padEls[padIdx].classList.add('pressed');
+    _callbacks.onFlash?.(pad, true);
+  }
 }
 
 export function setupMIDIInput(access) {
   for (const input of access.inputs.values()) {
     input.onmidimessage = (event) => {
-      const [status, data1, data2] = event.data;
+      if (event.data.length < 2) return; // SysEx等の短いメッセージを無視
+      const [status, data1, data2 = 0] = event.data;
 
-      // --- CC messages (top row + right column buttons) ---
-      if ((status & 0xF0) === 0xB0 && data2 > 0) {
-        const ccIdx = TOP_ROW_CCS.indexOf(data1);
-        if (ccIdx >= 0) {
-          log(`CC IN: CC${data1} val=${data2} (top row)`, 'in');
-          _cbs.onTopRow?.(ccIdx);
-          if (topRowEls[ccIdx]) {
-            topRowEls[ccIdx].classList.add('fn-active');
-            setTimeout(() => topRowEls[ccIdx].classList.remove('fn-active'), 200);
-          }
-          return;
-        }
-        const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
-        if (rcIdx >= 0) {
-          log(`CC IN: CC${data1} val=${data2} (right col)`, 'in');
-          _cbs.onRightCol?.(rcIdx);
-          if (rightColEls[rcIdx]) {
-            rightColEls[rcIdx].classList.add('fn-active');
-            setTimeout(() => rightColEls[rcIdx].classList.remove('fn-active'), 200);
-          }
-          return;
-        }
-        log(`CC IN: CC${data1} val=${data2} (unknown)`, 'in');
-        return;
-      }
-
-      // --- Note Off ---
-      if ((status & 0xF0) === 0x80 || ((status & 0xF0) === 0x90 && data2 === 0)) {
-        const semitone = getLaunchpadSemitone(data1);
-        if (semitone !== undefined) {
-          _cbs.onNoteOff?.(semitone);
-          const padIdx = pads.findIndex(p => p.launchpadNote === data1);
-          if (padIdx >= 0 && padEls[padIdx]) {
-            padEls[padIdx].classList.remove('pressed');
-            _cbs.onFlash?.(pads[padIdx], false);
-          }
-        }
-        return;
-      }
-
-      // --- Note On ---
-      if ((status & 0xF0) === 0x90 && data2 > 0) {
-        // Right column as Note (fallback — some firmware versions)
-        const rcIdx = RIGHT_COL_NOTES.indexOf(data1);
-        if (rcIdx >= 0) {
-          log(`Right col IN: Note ${data1} vel=${data2}`, 'in');
-          _cbs.onRightCol?.(rcIdx);
-          if (rightColEls[rcIdx]) {
-            rightColEls[rcIdx].classList.add('pressed');
-            setTimeout(() => rightColEls[rcIdx].classList.remove('pressed'), 150);
-          }
-          return;
-        }
-
-        // Main 8x8 grid
-        const semitone = getLaunchpadSemitone(data1);
-        if (semitone !== undefined) {
-          const noteName = NOTE_NAMES[((semitone % 12) + 12) % 12];
-          const octave = Math.floor(semitone / 12) - 1;
-          log(`Pad IN: note=${data1} → ${noteName}${octave} vel=${data2}`, 'in');
-          _cbs.onNoteOn?.(semitone, data2);
-          const padIdx = pads.findIndex(p => p.launchpadNote === data1);
-          if (padIdx >= 0 && padEls[padIdx]) {
-            padEls[padIdx].classList.add('pressed');
-            _cbs.onFlash?.(pads[padIdx], true);
-          }
-        }
-        return;
-      }
+      if ((status & 0xF0) === 0xB0 && data2 > 0)                                { handleCC(data1, data2);    return; }
+      if ((status & 0xF0) === 0x80 || ((status & 0xF0) === 0x90 && data2 === 0)) { handleNoteOff(data1);     return; }
+      if ((status & 0xF0) === 0x90 && data2 > 0)                                { handleNoteOn(data1, data2); return; }
     };
   }
 }

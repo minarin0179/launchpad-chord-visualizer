@@ -17,45 +17,36 @@ export function getScalePitchClasses() {
   return SCALES[state.scale].intervals.map(i => (state.root + i) % 12);
 }
 
-// onUpdate: inversion ボタン押下時に呼ぶコールバック（通常は updateAll）
-export function buildInversionButtons(onUpdate) {
-  const row = document.getElementById('inversion-row');
-  row.innerHTML = '';
-  const n = CHORD_TYPES[state.chordType].intervals.length;
-  const labels = ['Root', '1st', '2nd', '3rd', '4th'];
-  for (let i = 0; i < n; i++) {
-    const btn = document.createElement('button');
-    btn.className = 'btn' + (i === state.inversion ? ' active' : '');
-    btn.textContent = labels[i] || `${i}th`;
-    btn.onclick = () => { state.inversion = i; if (onUpdate) onUpdate(); };
-    row.appendChild(btn);
-  }
+// =====================
+// Pad Classification (DOM・LED 両方に使う純粋関数)
+// =====================
+// 戻り値: 'root' | 'bass' | 'chord' | 'scale' | 'off'
+export function classifyPad(pc, rootPC, chordAll, scalePCs, bassPC, showChord, showScale) {
+  if (pc === rootPC) return 'root';
+  if (showChord && bassPC !== null && pc === bassPC) return 'bass';
+  if (showChord && chordAll.includes(pc)) return 'chord';
+  if (showScale && scalePCs.includes(pc)) return 'scale';
+  return 'off';
 }
 
-// コード表示テキストを更新（#chord-name / #chord-notes / #chord-interval / #scale-key-label）
-export function updateChordDisplay() {
+// =====================
+// Chord Display Data (DOM更新は呼び出し元が行う)
+// =====================
+export function getChordDisplayData() {
   const chordPCs = getChordPitchClasses();
   const sym = CHORD_TYPES[state.chordType].symbol;
   const rootName = NOTE_NAMES[state.root];
   const bassName = chordPCs.bassPC !== null ? '/' + NOTE_NAMES[chordPCs.bassPC] : '';
-  document.getElementById('chord-name').textContent = rootName + sym + bassName;
-
   const noteNames = chordPCs.inverted.map(pc => NOTE_NAMES[pc]).join('  ');
-  document.getElementById('chord-notes').textContent = noteNames;
-
   const ints = CHORD_TYPES[state.chordType].intervals;
-  const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`);
-  document.getElementById('chord-interval').textContent = intNames.join(' — ');
-
+  const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`).join(' — ');
   const baseNoteName = NOTE_NAMES[state.baseNote % 12];
   const baseOctave = Math.floor(state.baseNote / 12) - 1;
   const baseInfo = `[Base: ${baseNoteName}${baseOctave}]`;
-  if (state.showScale) {
-    document.getElementById('scale-key-label').textContent =
-      `${rootName} ${SCALES[state.scale].label} Scale  ${baseInfo}`;
-  } else {
-    document.getElementById('scale-key-label').textContent = baseInfo;
-  }
+  const scaleKeyLabel = state.showScale
+    ? `${rootName} ${SCALES[state.scale].label} Scale  ${baseInfo}`
+    : baseInfo;
+  return { chordName: rootName + sym + bassName, noteNames, intNames, scaleKeyLabel };
 }
 
 // =====================

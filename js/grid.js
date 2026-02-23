@@ -1,5 +1,6 @@
 import { NOTE_NAMES, TOP_ROW_LABELS, TOP_ROW_CCS, RIGHT_COL_NOTES,
-         CC_UP, CC_DOWN, CC_LEFT, CC_RIGHT, buildPadData } from './constants.js';
+         CC_UP, CC_DOWN, CC_LEFT, CC_RIGHT, buildPadData,
+         MAX_BASE_NOTE_OCTAVE, MAX_BASE_NOTE_CAPO } from './constants.js';
 import { state, pads, setPads } from './state.js';
 import { log } from './logger.js';
 
@@ -81,7 +82,7 @@ export function buildGridDOM(onPadDown, onPadUp, onAfterRebuild) {
 // =====================
 export function shiftOctave(delta) {
   const newBase = state.baseNote + delta * 12;
-  if (newBase < 0 || newBase > 108) return;
+  if (newBase < 0 || newBase > MAX_BASE_NOTE_OCTAVE) return;
   state.baseNote = newBase;
   rebuildPads();
   const noteName = NOTE_NAMES[state.baseNote % 12];
@@ -91,14 +92,12 @@ export function shiftOctave(delta) {
 
 export function shiftCapo(delta) {
   const newBase = state.baseNote + delta;
-  if (newBase < 0 || newBase > 115) return;
+  if (newBase < 0 || newBase > MAX_BASE_NOTE_CAPO) return;
   state.baseNote = newBase;
   state.root = ((state.root + delta) % 12 + 12) % 12;
   state.capo += delta;
   state.inversion = 0;
-  // ルートボタンのアクティブ状態を同期
-  document.getElementById('root-buttons').querySelectorAll('.btn')
-    .forEach((b, i) => b.classList.toggle('active', i === state.root));
+  // ルートボタンの active 更新は rebuildPads() → _onAfterRebuild (updateAll) に委譲
   rebuildPads();
   updateCapoDisplay();
   log(`Capo ${state.capo >= 0 ? '+' : ''}${state.capo} → ${NOTE_NAMES[state.root]} (base=${state.baseNote})`, 'out');

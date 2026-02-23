@@ -127,3 +127,45 @@ export const COLORS = {
   off:     [0, 0, 0],
   pressed: [127, 127, 127],
 };
+
+// Logo LED color (RGB)
+export const LOGO_GREEN       = [0, 100, 0];
+// Function button LED colors (RGB)
+export const FN_BTN_COLOR     = [60, 30, 0];  // 上段アクティブボタン（OCT/Capo）
+export const FN_BTN_OFF_COLOR = [3, 3, 3];    // 上段非アクティブボタン
+// Metronome logo flash colors (RGB)
+export const METRO_LOGO_ACCENT = [127, 127, 127];
+export const METRO_LOGO_NORMAL = [60, 80, 100];
+
+// =====================
+// Timing Constants (ms)
+// =====================
+export const LOGO_FLASH_MS             = 80;   // メトロノームロゴフラッシュ持続時間
+export const PROGRAMMER_MODE_DELAY_MS  = 150;  // Programmer Mode切替後の待機時間
+export const FN_ACTIVE_DURATION_MS     = 200;  // 上段ボタン fn-active クラス保持時間
+export const RIGHT_COL_NOTE_DURATION_MS = 150; // 右列ボタン pressed クラス保持時間
+
+// =====================
+// BPM Range
+// =====================
+export const BPM_MIN     = 40;
+export const BPM_MAX     = 240;
+export const BPM_DEFAULT = 120;
+
+// =====================
+// Note Range Limits
+// =====================
+export const MAX_BASE_NOTE_OCTAVE = 108;  // オクターブ変更時の上限
+export const MAX_BASE_NOTE_CAPO   = 115;  // カポ変更時の上限
+
+// =====================
+// Velocity
+// =====================
+export const CLICK_PAD_VELOCITY = 80;  // 画面パッドクリック時の固定 velocity
+
+// =====================
+// Metronome Click Sound
+// =====================
+export const METRO_ACCENT       = { freq: 1200, vol: 0.35, decay: 0.055 };
+export const METRO_NORMAL       = { freq: 700,  vol: 0.18, decay: 0.04  };
+export const METRO_CLICK_RAMP_S = 0.002;  // linearRampToValueAtTime 用（秒）

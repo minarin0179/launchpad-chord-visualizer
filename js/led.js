@@ -1,6 +1,7 @@
-import { COLORS, TOP_ROW_CCS, RIGHT_COL_NOTES } from './constants.js';
+import { COLORS, TOP_ROW_CCS, RIGHT_COL_NOTES,
+         LOGO_GREEN, FN_BTN_COLOR, FN_BTN_OFF_COLOR } from './constants.js';
 import { state, pads } from './state.js';
-import { getChordPitchClasses, getScalePitchClasses } from './music.js';
+import { getChordPitchClasses, getScalePitchClasses, classifyPad } from './music.js';
 import { log } from './logger.js';
 
 // =====================
@@ -21,12 +22,12 @@ export function sendLogoLED(r, g, b) {
     state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03,
                            0x03, 99, r, g, b,
                            0xF7]);
-  } catch(e) {}
+  } catch(e) { log('MIDI send error: ' + e.message, 'err'); }
 }
 
 export function updateLogoLED() {
   if (!state.midiOutput) { sendLogoLED(0, 0, 0); return; }
-  sendLogoLED(0, 100, 0); // 接続中: 緑
+  sendLogoLED(...LOGO_GREEN);
 }
 
 // =====================
@@ -35,18 +36,8 @@ export function updateLogoLED() {
 export function getPadLEDColor(pitchClass) {
   const chordPCs = getChordPitchClasses();
   const scalePCs = getScalePitchClasses();
-  const rootPC = state.root;
-  const bassPC = chordPCs.bassPC;
-  const pc = pitchClass;
-  const isRoot  = pc === rootPC && chordPCs.all.includes(pc);
-  const isBass  = bassPC !== null && pc === bassPC;
-  const isChord = chordPCs.all.includes(pc);
-  const isScale = scalePCs.includes(pc);
-  if (isRoot)                          return COLORS.root;
-  else if (state.showChord && isBass)  return COLORS.bass;
-  else if (state.showChord && isChord) return COLORS.chord;
-  else if (state.showScale && isScale) return COLORS.scale;
-  else                                 return COLORS.off;
+  const cls = classifyPad(pitchClass, state.root, chordPCs.all, scalePCs, chordPCs.bassPC, state.showChord, state.showScale);
+  return COLORS[cls];
 }
 
 // 単一パッドへの SysEx RGB 送信
@@ -56,7 +47,7 @@ export function sendPadLED(launchpadNote, r, g, b) {
     state.midiOutput.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03,
                            0x03, launchpadNote, r, g, b,
                            0xF7]);
-  } catch(e) {}
+  } catch(e) { log('MIDI send error: ' + e.message, 'err'); }
 }
 
 // 同じ semitone のパッドを全て白フラッシュ → 元の色に戻す
@@ -78,27 +69,14 @@ export function sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC) {
   const data = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x03];
 
   pads.forEach(pad => {
-    const pc = pad.pitchClass;
-    const isRoot = pc === rootPC && chordPCs.includes(pc);
-    const isBass = bassPC !== null && pc === bassPC;
-    const isChord = chordPCs.includes(pc);
-    const isScale = scalePCs.includes(pc);
-
-    let color;
-    if (isRoot)                          color = COLORS.root;
-    else if (state.showChord && isBass)  color = COLORS.bass;
-    else if (state.showChord && isChord) color = COLORS.chord;
-    else if (state.showScale && isScale) color = COLORS.scale;
-    else                                 color = COLORS.off;
-
+    const cls = classifyPad(pad.pitchClass, rootPC, chordPCs, scalePCs, bassPC, state.showChord, state.showScale);
+    const color = COLORS[cls];
     data.push(0x03, pad.launchpadNote, color[0], color[1], color[2]);
   });
 
   // 上段ボタン: OCT▲/▼・◄/► はオレンジ、残りはほぼ消灯
-  const fnColor = [60, 30, 0];
-  const fnOff   = [3, 3, 3];
   TOP_ROW_CCS.forEach((cc, i) => {
-    const color = i < 4 ? fnColor : fnOff;
+    const color = i < 4 ? FN_BTN_COLOR : FN_BTN_OFF_COLOR;
     data.push(0x03, cc, color[0], color[1], color[2]);
   });
 
@@ -119,7 +97,7 @@ export function clearAllLEDs() {
   TOP_ROW_CCS.forEach(cc => data.push(0x03, cc, 0, 0, 0));
   RIGHT_COL_NOTES.forEach(n => data.push(0x03, n, 0, 0, 0));
   data.push(0xF7);
-  try { state.midiOutput.send(data); } catch(e) {}
+  try { state.midiOutput.send(data); } catch(e) { log('MIDI clear error: ' + e.message, 'err'); }
   log('All LEDs cleared', 'out');
   updateLogoLED();
 }

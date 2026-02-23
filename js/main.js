@@ -1,14 +1,16 @@
 // ES Modules: 全 import はファイル先頭にまとめる
-import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS } from './constants.js';
+import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS,
+         CLICK_PAD_VELOCITY, BPM_MIN, BPM_MAX, BPM_DEFAULT,
+         LOGO_FLASH_MS, METRO_LOGO_ACCENT, METRO_LOGO_NORMAL, LOGO_GREEN } from './constants.js';
 import { state, pads } from './state.js';
 import { log } from './logger.js';
 import { startNote, stopNote, getActiveNotes, playMetronomeClick } from './audio.js';
-import { getChordPitchClasses, getScalePitchClasses, buildInversionButtons,
-         detectChordFromActiveNotes, updateChordDisplay } from './music.js';
+import { getChordPitchClasses, getScalePitchClasses, classifyPad,
+         detectChordFromActiveNotes, getChordDisplayData } from './music.js';
 import { sendToLaunchpad, flashPressedPad, updateLogoLED, sendLogoLED, clearAllLEDs } from './led.js';
 import { buildGridDOM, handleTopRowPress, handleRightColPress,
          shiftCapo, padEls } from './grid.js';
-import { initMIDI, onDeviceSelect, populateDevices, setupMIDIInput } from './midi.js';
+import { initMIDI, onDeviceSelect, rescanMIDI } from './midi.js';
 
 // メトロノーム内部状態（公開 state に含めない）
 let _metroTimer = null;
@@ -18,10 +20,35 @@ let _metroBeat  = 0;
 let _prevUpdateKey = null;
 
 // =====================
+// Volume (DOM への直接依存を audio.js から分離)
+// =====================
+function getVolume() {
+  return parseInt(document.getElementById('volume').value) / 100;
+}
+
+// =====================
 // Note change callback (audio → chord detection)
 // =====================
 function handleNoteChange() {
   detectChordFromActiveNotes(getActiveNotes());
+}
+
+// =====================
+// Inversion buttons (music.js からの DOM 操作を移管)
+// =====================
+const INVERSION_LABELS = ['Root', '1st', '2nd', '3rd', '4th'];
+
+function buildInversionButtons() {
+  const row = document.getElementById('inversion-row');
+  row.innerHTML = '';
+  const n = CHORD_TYPES[state.chordType].intervals.length;
+  for (let i = 0; i < n; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (i === state.inversion ? ' active' : '');
+    btn.textContent = INVERSION_LABELS[i] || `${i}th`;
+    btn.onclick = () => { state.inversion = i; updateAll(); };
+    row.appendChild(btn);
+  }
 }
 
 // =====================
@@ -41,32 +68,27 @@ function updateAll() {
   if (key !== _prevUpdateKey) {
     _prevUpdateKey = key;
 
-    buildInversionButtons(updateAll);
+    // Inversion ボタン再構築
+    buildInversionButtons();
 
+    // パッドDOMクラス更新（classifyPad で統一）
     pads.forEach((pad, idx) => {
       const el = padEls[idx];
       if (!el) return;
-      const pc = pad.pitchClass;
-      const isRoot  = pc === rootPC && chordPCs.all.includes(pc);
-      const isBass  = chordPCs.bassPC !== null && pc === chordPCs.bassPC;
-      const isChord = chordPCs.all.includes(pc);
-      const isScale = scalePCs.includes(pc);
-
-      el.className = 'pad';
-      if (isRoot) {
-        el.classList.add('root');
-      } else if (state.showChord && isBass) {
-        el.classList.add('bass');
-      } else if (state.showChord && isChord) {
-        el.classList.add('chord');
-      } else if (state.showScale && isScale) {
-        el.classList.add('scale-only');
-      } else {
-        el.classList.add('off');
-      }
+      const cls = classifyPad(pad.pitchClass, rootPC, chordPCs.all, scalePCs, chordPCs.bassPC, state.showChord, state.showScale);
+      el.className = `pad ${cls}`;
     });
 
-    updateChordDisplay();
+    // ルートボタン active 状態（grid.js の shiftCapo からの DOM 操作を移管）
+    document.getElementById('root-buttons').querySelectorAll('.btn')
+      .forEach((b, i) => b.classList.toggle('active', i === rootPC));
+
+    // コード表示テキスト（music.js の updateChordDisplay からの DOM 操作を移管）
+    const d = getChordDisplayData();
+    document.getElementById('chord-name').textContent      = d.chordName;
+    document.getElementById('chord-notes').textContent     = d.noteNames;
+    document.getElementById('chord-interval').textContent  = d.intNames;
+    document.getElementById('scale-key-label').textContent = d.scaleKeyLabel;
   }
 
   sendToLaunchpad(chordPCs.all, scalePCs, rootPC, chordPCs.bassPC);
@@ -79,10 +101,9 @@ function metronomeBeat() {
   const isAccent = _metroBeat === 0;
   _metroBeat = (_metroBeat + 1) % 4;
 
-  sendLogoLED(isAccent ? 127 : 60, isAccent ? 127 : 80, isAccent ? 127 : 100);
-  setTimeout(() => {
-    if (state.midiOutput) sendLogoLED(0, 100, 0);
-  }, 80);
+  const [r, g, b] = isAccent ? METRO_LOGO_ACCENT : METRO_LOGO_NORMAL;
+  sendLogoLED(r, g, b);
+  setTimeout(() => { if (state.midiOutput) sendLogoLED(...LOGO_GREEN); }, LOGO_FLASH_MS);
 
   playMetronomeClick(isAccent);
 }
@@ -205,7 +226,7 @@ document.getElementById('metro-bpm').oninput = function() {
 };
 
 document.getElementById('metro-bpm-num').onchange = function() {
-  const v = Math.min(240, Math.max(40, parseInt(this.value) || 120));
+  const v = Math.min(BPM_MAX, Math.max(BPM_MIN, parseInt(this.value) || BPM_DEFAULT));
   this.value = v;
   state.bpm = v;
   document.getElementById('metro-bpm').value = v;
@@ -228,17 +249,7 @@ document.getElementById('rescan-btn').onclick = async () => {
   statusEl.textContent = 'Rescanning...';
   statusEl.className = 'searching';
   try {
-    const access = await navigator.requestMIDIAccess({ sysex: true });
-    state.midiAccess = access;
-    populateDevices(access);
-    setupMIDIInput(access);
-    access.onstatechange = (e) => {
-      console.log('MIDI state change:', e.port.name, e.port.state);
-      populateDevices(access);
-      setupMIDIInput(access);
-      if (!state.midiOutput) stopMetronome();
-      updateLogoLED();
-    };
+    await rescanMIDI();
   } catch(e) {
     statusEl.textContent = 'MIDI access denied';
     statusEl.className = 'disconnected';
@@ -252,7 +263,7 @@ document.getElementById('device-select').onchange = onDeviceSelect;
 // =====================
 buildGridDOM(
   (pad, el) => {
-    startNote(pad.semitone, 80, handleNoteChange);
+    startNote(pad.semitone, CLICK_PAD_VELOCITY, getVolume(), handleNoteChange);
     el.classList.add('pressed');
     flashPressedPad(pad, true);
   },
@@ -268,7 +279,7 @@ initMIDI({
   onUpdateAll:     updateAll,
   onUpdateLogoLED: updateLogoLED,
   onStopMetronome: stopMetronome,
-  onNoteOn:        (semitone, velocity) => startNote(semitone, velocity, handleNoteChange),
+  onNoteOn:        (semitone, velocity) => startNote(semitone, velocity, getVolume(), handleNoteChange),
   onNoteOff:       (semitone) => stopNote(semitone, handleNoteChange),
   onFlash:         flashPressedPad,
   onTopRow:        handleTopRowPress,
