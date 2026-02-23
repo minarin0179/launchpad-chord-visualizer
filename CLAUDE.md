@@ -84,12 +84,14 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 - `semitone = baseNote + row * 5 + col`
 
 ### 上段ボタン割当
+> 実装は `midi.js` → `handleTopRowPress(index)` → `shiftOctave(±12)` / `shiftCapo(±1)` 経由
+
 | CC  | 機能 |
 |-----|------|
-| 91  | Octave Up (+12) — baseNoteを+12 |
-| 92  | Octave Down (-12) — baseNoteを-12 |
-| 93  | Capo Down (-1) — baseNoteとrootを同時に-1（視覚パターン固定で移調） |
-| 94  | Capo Up (+1) — baseNoteとrootを同時に+1（視覚パターン固定で移調） |
+| 91  | Octave Up (+12) — `shiftOctave(+1)` |
+| 92  | Octave Down (-12) — `shiftOctave(-1)` |
+| 93  | Capo Down (-1) — `shiftCapo(-1)`（baseNoteとrootを同時に-1、視覚パターン固定で移調） |
+| 94  | Capo Up (+1) — `shiftCapo(+1)`（baseNoteとrootを同時に+1、視覚パターン固定で移調） |
 | 95-98 | 未割当（将来用） |
 
 ---
@@ -112,8 +114,6 @@ const state = {
   midiAccess: null,    // MIDIAccessオブジェクト
   bpm: 120,            // メトロノームBPM（40〜240）
   metronome: false,    // メトロノームON/OFF
-  _metroTimer: null,   // setInterval ID（内部用）
-  _metroBeat: 0,       // 拍カウンター（0=アクセント拍、1〜3=通常拍）
 };
 ```
 
@@ -146,11 +146,26 @@ const state = {
 
 ### メトロノーム仕様
 - BPM範囲: 40〜240（スライダー + 数値入力の双方向同期）
-- 固定4拍子（`_metroBeat` が 0〜3 を循環）
+- 固定4拍子（`main.js` のモジュールスコープ変数 `_metroBeat` が 0〜3 を循環、state には含まれない）
 - アクセント拍（beat 0）: 1200Hz / 音量0.35 / 減衰55ms — **ぴ**
 - 通常拍（beat 1〜3）: 700Hz / 音量0.18 / 減衰40ms — **ぽ**
 - BPM変更時はタイマーを再スタート（拍カウンターもリセット）
 - MIDI未接続時はSTARTボタンを押しても起動しない
+
+---
+
+## 主要定数（constants.js）
+
+| 定数 | 値 / 型 | 用途 |
+|------|--------|------|
+| `INTERVAL_NAMES` | `['R','b2','2','b3','3','4','#4','5','b6','6','b7','7','(8)','b9','9']` | UI インターバル表記 |
+| `MAX_BASE_NOTE_OCTAVE` | `108` | オクターブ Up 上限（これ以上は `shiftOctave` が無効） |
+| `MAX_BASE_NOTE_CAPO` | `115` | カポ Up 上限（これ以上は `shiftCapo` が無効） |
+| `LOGO_FLASH_MS` | `80` | ロゴLEDフラッシュ後に緑に戻すまでの遅延（ms） |
+| `PROGRAMMER_MODE_DELAY_MS` | `150` | Programmer Mode SysEx 送信後の待機時間（ms） |
+| `CLICK_PAD_VELOCITY` | `80` | 画面パッドクリック時の固定 velocity |
+| `METRO_ACCENT` | `{ freq: 1200, vol: 0.35, decay: 0.055 }` | メトロノームアクセント拍（1拍目）音定数 |
+| `METRO_NORMAL` | `{ freq: 700, vol: 0.18, decay: 0.040 }` | メトロノーム通常拍（2〜4拍目）音定数 |
 
 ---
 
@@ -205,16 +220,23 @@ Synth, Piano, Organ, Guitar, Bass, Strings
 | `updateAll()` | `main.js` | 画面更新 + Launchpad LED送信の中心関数 |
 | `getChordPitchClasses()` | `music.js` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音のPC（基本形時は `null`） |
 | `sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC)` | `led.js` | SysEx RGBメッセージをLaunchpadに送信（bassPC対応） |
+| `initMIDI(callbacks)` | `midi.js` | MIDI初期化・デバイス列挙・コールバック注入の統合エントリ（`setupMIDIInput` を内部で呼ぶ） |
+| `rescanMIDI()` | `midi.js` | MIDI デバイス再スキャン（RESCAN ボタン用） |
 | `setupMIDIInput(access)` | `midi.js` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
-| `startNote(midiNote, velocity?, onNoteChange?)` | `audio.js` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録） |
+| `startNote(midiNote, velocity?, volume?, onNoteChange?)` | `audio.js` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録）。`volume` は `#volume` スライダー値（0〜1） |
 | `stopNote(midiNote, onNoteChange?)` | `audio.js` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
+| `shiftOctave(delta)` | `grid.js` | baseNote を ±12半音シフト（上段CC 91/92） |
 | `shiftCapo(delta)` | `grid.js` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
 | `updateCapoDisplay()` | `grid.js` | Capo UIの数値表示を更新 |
+| `updateBaseNoteDisplay()` | `grid.js` | `#scale-key-label` の `data-base` 属性を更新 |
+| `handleTopRowPress(index)` | `grid.js` | 上段ボタン（CC 91-98）の動作分岐（`shiftOctave` / `shiftCapo` を呼び出す） |
+| `handleRightColPress(index)` | `grid.js` | 右列ボタン（Note）のハンドラ（現在はログのみ） |
 | `rebuildPads()` | `grid.js` | オクターブ/Capo後にパッドデータとDOMを更新 |
 | `setProgrammerMode()` | `led.js` | SysExでProgrammerモードに切替 |
 | `sendLogoLED(r, g, b)` | `led.js` | パッド99（ロゴ）にRGB色を送信（単体SysEx） |
 | `updateLogoLED()` | `led.js` | 接続状態に応じてロゴLEDを更新（接続中=緑、切断=消灯） |
 | `playMetronomeClick(isAccent)` | `audio.js` | メトロノームのクリック音を再生（アクセント拍/通常拍で周波数・音量が異なる） |
+| `buildInversionButtons()` | `main.js` | Inversion 選択ボタンをコード種別の音数に応じて動的生成 |
 | `metronomeBeat()` | `main.js` | 1ビート処理（LEDフラッシュ + クリック音 + 拍カウンター更新） |
 | `startMetronome()` | `main.js` | メトロノーム開始（タイマー設定・拍カウンターリセット） |
 | `stopMetronome()` | `main.js` | メトロノーム停止（タイマー解除・ロゴLEDを接続色に戻す） |
