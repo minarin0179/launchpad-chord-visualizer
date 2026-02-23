@@ -1,8 +1,4 @@
-# Launchpad X Chord Visualizer
-
-Launchpad X のパッドをコード・スケールに合わせて RGB で光らせ、パッドを押すと音が鳴る Web アプリ。
-
-**https://launchpad-chord-visualizer.pages.dev/**（Chrome 推奨）
+# [Launchpad X Chord Visualizer](https://launchpad-chord-visualizer.pages.dev/)
 
 ![Launchpad X Chord Visualizer](image.png)
 
