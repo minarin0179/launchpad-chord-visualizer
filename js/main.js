@@ -1,5 +1,5 @@
 // ES Modules: 全 import はファイル先頭にまとめる
-import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS,
+import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS, INVERSION_LABELS,
          CLICK_PAD_VELOCITY, BPM_MIN, BPM_MAX, BPM_DEFAULT,
          LOGO_FLASH_MS, METRO_LOGO_ACCENT, METRO_LOGO_NORMAL, LOGO_GREEN } from './constants.js';
 import { state, pads } from './state.js';
@@ -10,7 +10,7 @@ import { getChordPitchClasses, getScalePitchClasses, classifyPad,
 import { sendToLaunchpad, flashPressedPad, updateLogoLED, sendLogoLED, clearAllLEDs } from './led.js';
 import { buildGridDOM, handleTopRowPress, handleRightColPress,
          shiftCapo, padEls } from './grid.js';
-import { initMIDI, onDeviceSelect, rescanMIDI } from './midi.js';
+import { initMIDI, onDeviceSelect, rescanMIDI, rebuildPadMap } from './midi.js';
 
 // メトロノーム内部状態（公開 state に含めない）
 let _metroTimer = null;
@@ -36,8 +36,6 @@ function handleNoteChange() {
 // =====================
 // Inversion buttons (music.js からの DOM 操作を移管)
 // =====================
-const INVERSION_LABELS = ['Root', '1st', '2nd', '3rd', '4th'];
-
 function buildInversionButtons() {
   const row = document.getElementById('inversion-row');
   row.innerHTML = '';
@@ -185,25 +183,17 @@ buildButtonGroup(
 // =====================
 // DOM: Toggles
 // =====================
-document.getElementById('toggle-chord').onclick = function() {
-  state.showChord = !state.showChord;
-  this.classList.toggle('active', state.showChord);
-  document.getElementById('chord-control').classList.toggle('hidden', !state.showChord);
-  updateAll();
-};
-document.getElementById('toggle-scale').onclick = function() {
-  state.showScale = !state.showScale;
-  this.classList.toggle('active', state.showScale);
-  document.getElementById('scale-control').classList.toggle('hidden', !state.showScale);
-  document.getElementById('scale-key-label').classList.toggle('hidden', !state.showScale);
-  updateAll();
-};
-document.getElementById('toggle-inversion').onclick = function() {
-  state.showInversion = !state.showInversion;
-  this.classList.toggle('active', state.showInversion);
-  document.getElementById('inversion-control').classList.toggle('hidden', !state.showInversion);
-  updateAll();
-};
+function setupToggle(toggleId, stateKey, controlIds) {
+  document.getElementById(toggleId).onclick = function() {
+    state[stateKey] = !state[stateKey];
+    this.classList.toggle('active', state[stateKey]);
+    controlIds.forEach(id => document.getElementById(id).classList.toggle('hidden', !state[stateKey]));
+    updateAll();
+  };
+}
+setupToggle('toggle-chord',     'showChord',     ['chord-control']);
+setupToggle('toggle-scale',     'showScale',     ['scale-control', 'scale-key-label']);
+setupToggle('toggle-inversion', 'showInversion', ['inversion-control']);
 
 // =====================
 // DOM: Capo controls
@@ -272,7 +262,7 @@ buildGridDOM(
     el.classList.remove('pressed');
     flashPressedPad(pad, false);
   },
-  updateAll  // onAfterRebuild (rebuildPads 後に呼ばれる)
+  () => { rebuildPadMap(); updateAll(); }  // onAfterRebuild (rebuildPads 後に呼ばれる)
 );
 
 initMIDI({

@@ -35,6 +35,8 @@ export const SCALES = {
 
 export const INTERVAL_NAMES = ['R','b2','2','b3','3','4','#4','5','b6','6','b7','7','(8)','b9','9'];
 
+export const INVERSION_LABELS = ['Root', '1st', '2nd', '3rd', '4th'];
+
 // =====================
 // Instrument Presets
 // =====================

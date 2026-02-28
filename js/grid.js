@@ -16,6 +16,12 @@ let _onPadDown = null;       // (pad, el) => void
 let _onPadUp   = null;       // (pad, el) => void
 let _onAfterRebuild = null;  // () => void  ← updateAll
 
+function _attachPadHandlers(el, pad) {
+  el.onpointerdown  = (e) => { e.preventDefault(); if (_onPadDown) _onPadDown(pad, el); };
+  el.onpointerup    = () => { if (_onPadUp) _onPadUp(pad, el); };
+  el.onpointerleave = () => { if (_onPadUp) _onPadUp(pad, el); };
+}
+
 // =====================
 // Build Grid DOM
 // =====================
@@ -52,9 +58,7 @@ export function buildGridDOM(onPadDown, onPadUp, onAfterRebuild) {
       el.className = 'pad off';
       el.dataset.note = NOTE_NAMES[pad.pitchClass];
       el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
-      el.onpointerdown = (e) => { e.preventDefault(); if (_onPadDown) _onPadDown(pad, el); };
-      el.onpointerup   = () => { if (_onPadUp) _onPadUp(pad, el); };
-      el.onpointerleave = () => { if (_onPadUp) _onPadUp(pad, el); };
+      _attachPadHandlers(el, pad);
       gridEl.appendChild(el);
       padEls[padIdx] = el;
     }
@@ -128,9 +132,7 @@ export function rebuildPads() {
     if (!el) return;
     el.dataset.note = NOTE_NAMES[pad.pitchClass];
     el.title = `${NOTE_NAMES[pad.pitchClass]} (MIDI ${pad.semitone})`;
-    el.onpointerdown = (e) => { e.preventDefault(); if (_onPadDown) _onPadDown(pad, el); };
-    el.onpointerup   = () => { if (_onPadUp) _onPadUp(pad, el); };
-    el.onpointerleave = () => { if (_onPadUp) _onPadUp(pad, el); };
+    _attachPadHandlers(el, pad);
   });
 
   updateBaseNoteDisplay();

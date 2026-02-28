@@ -111,30 +111,44 @@ export function populateDevices(access) {
   onDeviceSelect();
 }
 
+function _setMIDIControlsEnabled(enabled) {
+  document.getElementById('send-btn').disabled = !enabled;
+  document.getElementById('clear-btn').disabled = !enabled;
+}
+
 export function onDeviceSelect() {
   const id = document.getElementById('device-select').value;
   if (id && state.midiAccess) {
     const output = state.midiAccess.outputs.get(id);
     if (output && output.state === 'connected') {
       state.midiOutput = output;
-      document.getElementById('send-btn').disabled = false;
-      document.getElementById('clear-btn').disabled = false;
+      _setMIDIControlsEnabled(true);
       // Programmer Mode に切替後、少し待ってから LED 更新
       setProgrammerMode();
       setTimeout(() => { _callbacks.onUpdateAll?.(); _callbacks.onUpdateLogoLED?.(); }, PROGRAMMER_MODE_DELAY_MS);
     } else {
       _callbacks.onStopMetronome?.();
       state.midiOutput = null;
-      document.getElementById('send-btn').disabled = true;
-      document.getElementById('clear-btn').disabled = true;
+      _setMIDIControlsEnabled(false);
     }
   } else {
     _callbacks.onStopMetronome?.();
     state.midiOutput = null;
-    document.getElementById('send-btn').disabled = true;
-    document.getElementById('clear-btn').disabled = true;
+    _setMIDIControlsEnabled(false);
   }
 }
+
+// =====================
+// Pad lookup map (launchpadNote → pad, O(1))
+// =====================
+let _padByNote = new Map();
+
+function _buildPadMap() {
+  _padByNote = new Map(pads.map(p => [p.launchpadNote, p]));
+}
+
+/** pads 更新後に呼び出して Map を再構築する */
+export function rebuildPadMap() { _buildPadMap(); }
 
 // =====================
 // MIDI Input (Launchpad → sound + control)
@@ -166,7 +180,7 @@ function handleCC(data1, data2) {
 }
 
 function handleNoteOff(data1) {
-  const pad = pads.find(p => p.launchpadNote === data1);
+  const pad = _padByNote.get(data1);
   if (!pad) return;
   const padIdx = pad.row * 8 + pad.col;
   _callbacks.onNoteOff?.(pad.semitone);
@@ -187,7 +201,7 @@ function handleNoteOn(data1, data2) {
   }
 
   // Main 8x8 grid
-  const pad = pads.find(p => p.launchpadNote === data1);
+  const pad = _padByNote.get(data1);
   if (!pad) return;
   const padIdx = pad.row * 8 + pad.col;
   const noteName = NOTE_NAMES[pad.pitchClass];
@@ -201,6 +215,7 @@ function handleNoteOn(data1, data2) {
 }
 
 export function setupMIDIInput(access) {
+  _buildPadMap();
   for (const input of access.inputs.values()) {
     input.onmidimessage = (event) => {
       if (event.data.length < 2) return; // SysEx等の短いメッセージを無視
