@@ -1,0 +1,10 @@
+{
+  "name": "launchpad-chord-visualizer",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/launchpad-x"
+  }
+}

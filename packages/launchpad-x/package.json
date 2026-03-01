@@ -1,0 +1,32 @@
+{
+  "name": "launchpad-x",
+  "version": "0.1.0",
+  "description": "Comprehensive TypeScript library for Novation Launchpad X (Programmer mode, LED control, MIDI I/O)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "launchpad",
+    "novation",
+    "midi",
+    "sysex",
+    "led"
+  ],
+  "license": "MIT"
+}
