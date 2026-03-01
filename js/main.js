@@ -101,7 +101,7 @@ function metronomeBeat() {
 
   const [r, g, b] = isAccent ? METRO_LOGO_ACCENT : METRO_LOGO_NORMAL;
   sendLogoLED(r, g, b);
-  setTimeout(() => { if (state.midiOutput) sendLogoLED(...LOGO_GREEN); }, LOGO_FLASH_MS);
+  setTimeout(() => { if (state.device) sendLogoLED(...LOGO_GREEN); }, LOGO_FLASH_MS);
 
   playMetronomeClick(isAccent);
 }
@@ -225,7 +225,7 @@ document.getElementById('metro-bpm-num').onchange = function() {
 
 document.getElementById('metro-btn').onclick = () => {
   if (state.metronome) stopMetronome();
-  else if (state.midiOutput) startMetronome();
+  else if (state.device) startMetronome();
 };
 
 // =====================

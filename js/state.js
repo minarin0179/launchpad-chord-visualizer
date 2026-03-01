@@ -14,7 +14,7 @@ export const state = {
   showInversion: false,
   scale: 'major',
   instrument: 'piano',
-  midiOutput: null,
+  device: null,     // LaunchpadX instance (set by midi.js when a device is selected)
   midiAccess: null,
   bpm: 120,
   metronome: false,
