@@ -1,8 +1,9 @@
-import { NOTE_NAMES, TOP_ROW_LABELS, TOP_ROW_CCS, RIGHT_COL_NOTES,
+import { NOTE_NAMES, TOP_ROW_LABELS,
          CC_UP, CC_DOWN, CC_LEFT, CC_RIGHT, buildPadData,
          MAX_BASE_NOTE_OCTAVE, MAX_BASE_NOTE_CAPO } from './constants.js';
 import { state, pads, setPads } from './state.js';
 import { log } from './logger.js';
+import { TOP_ROW_CCS, RIGHT_COL_NOTES } from '../packages/launchpad-x/dist/index.js';
 
 // =====================
 // DOM references

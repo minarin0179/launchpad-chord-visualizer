@@ -1,10 +1,9 @@
-import { TOP_ROW_CCS, RIGHT_COL_NOTES,
-         PROGRAMMER_MODE_DELAY_MS, FN_ACTIVE_DURATION_MS, RIGHT_COL_NOTE_DURATION_MS,
+import { PROGRAMMER_MODE_DELAY_MS, FN_ACTIVE_DURATION_MS, RIGHT_COL_NOTE_DURATION_MS,
          NOTE_NAMES } from './constants.js';
 import { state, pads } from './state.js';
 import { padEls, topRowEls, rightColEls } from './grid.js';
 import { log } from './logger.js';
-import { LaunchpadX, fromWebMIDI } from '../packages/launchpad-x/dist/index.js';
+import { LaunchpadX, fromWebMIDI, TOP_ROW_CCS, RIGHT_COL_NOTES } from '../packages/launchpad-x/dist/index.js';
 
 // =====================
 // MIDI Device Management

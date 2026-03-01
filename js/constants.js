@@ -101,9 +101,7 @@ export const CC_DOWN  = 92;  // Octave Down
 export const CC_LEFT  = 93;  // Transpose -1
 export const CC_RIGHT = 94;  // Transpose +1
 
-export const RIGHT_COL_NOTES = [89, 79, 69, 59, 49, 39, 29, 19]; // top to bottom
 export const TOP_ROW_LABELS  = ['OCT▲', 'OCT▼', '◄', '►', '', '', '', ''];
-export const TOP_ROW_CCS     = [91, 92, 93, 94, 95, 96, 97, 98];
 
 export function buildPadData(baseNote) {
   const pads = [];

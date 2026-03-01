@@ -1,16 +1,16 @@
-import { COLORS, TOP_ROW_CCS,
-         LOGO_GREEN, FN_BTN_COLOR, FN_BTN_OFF_COLOR } from './constants.js';
+import { COLORS, LOGO_GREEN, FN_BTN_COLOR, FN_BTN_OFF_COLOR } from './constants.js';
 import { state, pads } from './state.js';
 import { getChordPitchClasses, getScalePitchClasses, classifyPad } from './music.js';
 import { log } from './logger.js';
+import { TOP_ROW_CCS, LOGO_PAD } from '../packages/launchpad-x/dist/index.js';
 
 // =====================
-// Logo LED (pad 99)
+// Logo LED
 // =====================
 export function sendLogoLED(r, g, b) {
   if (!state.device) return;
   try {
-    state.device.setRGB(99, r, g, b);
+    state.device.setRGB(LOGO_PAD, r, g, b);
   } catch(e) { log('MIDI send error: ' + e.message, 'err'); }
 }
 
