@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# TypeScript build output
+packages/launchpad-x/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.suo
+*.user
+
+# Logs
+*.log
+npm-debug.log*
