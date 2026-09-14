@@ -203,6 +203,16 @@ js/
   grid.js        グリッド DOM・カポ・オクターブ操作
   midi.js        MIDI デバイス管理・入力ハンドリング
   main.js        エントリーポイント・updateAll・メトロノーム・全体統合
+  chord-analyzer/  オーディオ → コード進行解析（DOM 非依存、Worker / Node で動作）
+    dsp.js         FFT・ダウンサンプル
+    analyzer.js    extractFeatures（ビート同期クロマ。センターカット / HPSS / メロディ抑制の全組み合わせを事前計算）/ decodeChords（バリアント選択 + キー推定 + Viterbi）
+    worker.js      extractFeatures を Worker で実行
+    capo.js        カポ位置でのコード表示名・構成音の C メジャースケール適合率・自動カポ選択（suggestCapo）
+  analyze/       YouTube 同期解析ページ（analyze.html）用
+    youtube.js     IFrame Player API ラッパー・補間付き再生時刻
+    capture.js     タブ音声キャプチャ（getDisplayMedia + AudioWorklet）
+    page.js        スキャン → 解析 → タイムライン同期表示
+analyze.html / analyze.css  コード解析プロトタイプページ
 ```
 
 ### モジュール依存関係（循環なし）
