@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chord Analyzer — Launchpad X Chord Visualizer</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="analyze.css">
+</head>
+<body>
+
+<header>
+  <h1>Chord Analyzer // YouTube</h1>
+  <p>曲全体のコード進行を解析して再生に同期表示（プロトタイプ） — <a href="index.html">Visualizer に戻る</a></p>
+</header>
+
+<div class="az-layout">
+  <section class="az-panel">
+    <div class="az-row">
+      <input id="yt-url" type="url" placeholder="https://www.youtube.com/watch?v=...">
+      <button class="btn" id="load-btn">LOAD</button>
+    </div>
+    <div class="az-player-wrap"><div id="player"></div></div>
+    <div class="az-row">
+      <label class="az-inline">Scan
+        <select id="scan-rate">
+          <option value="1">1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2" selected>2x</option>
+        </select>
+      </label>
+      <button class="btn" id="scan-btn" disabled>● SCAN</button>
+      <button class="btn" id="stop-btn" disabled>■ STOP</button>
+      <label class="btn" id="file-label">AUDIO FILE<input type="file" id="file-input" accept="audio/*" hidden></label>
+    </div>
+    <div id="status" class="az-status">YouTube の URL を入力して LOAD</div>
+    <div class="az-progress"><div id="progress-bar"></div></div>
+  </section>
+
+  <section class="az-panel">
+    <div class="panel-label">Now</div>
+    <div id="now-chord">—</div>
+    <div class="az-next">NEXT <span id="next-chord">—</span> <span id="next-in"></span></div>
+
+    <dl class="az-info">
+      <dt>Key</dt><dd id="info-key">—</dd>
+      <dt>Tempo</dt><dd id="info-tempo">—</dd>
+      <dt>Chords</dt><dd id="info-segments">—</dd>
+      <dt>Source</dt><dd id="info-source">—</dd>
+    </dl>
+
+    <div class="panel-label">Capo <span class="az-hint">カポ分下げて表示（AUTO = 構成音が C メジャースケールに最も収まる位置）</span></div>
+    <div class="az-row">
+      <button class="btn" id="capo-down">◄</button>
+      <span id="capo-value" class="az-capo-value">0</span>
+      <button class="btn" id="capo-up">►</button>
+      <button class="btn active" id="capo-auto">AUTO</button>
+      <span id="capo-hint" class="az-status"></span>
+    </div>
+
+    <div class="panel-label">Decode</div>
+    <div class="az-params">
+      <label>Vocabulary
+        <select id="opt-vocab">
+          <option value="full" selected>7th / sus4 / dim / aug 含む</option>
+          <option value="triads">メジャー / マイナーのみ</option>
+        </select>
+        <span></span>
+      </label>
+      <label>Stickiness
+        <input type="range" id="opt-stay" min="0.1" max="0.95" step="0.05" value="0.6">
+        <span id="opt-stay-value">0.60</span>
+      </label>
+      <label>Bass weight
+        <input type="range" id="opt-bass" min="0" max="1" step="0.05" value="0.3">
+        <span id="opt-bass-value">0.30</span>
+      </label>
+      <label>Offset
+        <input type="range" id="opt-offset" min="-1000" max="1000" step="10" value="0">
+        <span id="opt-offset-value">0 ms</span>
+      </label>
+      <label>Beat click
+        <input type="checkbox" id="opt-click">
+        <span class="az-note">検出したビートでクリック音（ずれ確認用）</span>
+      </label>
+    </div>
+    <div class="panel-label">Separation <span class="az-hint">解析済みなら再スキャン不要で切替</span></div>
+    <div class="az-params">
+      <label>Center cut
+        <input type="checkbox" id="opt-center">
+        <span id="opt-center-note" class="az-note">ボーカル除去</span>
+      </label>
+      <label>HPSS
+        <input type="checkbox" id="opt-hpss">
+        <span class="az-note">ドラム除去</span>
+      </label>
+      <label>Melody
+        <input type="checkbox" id="opt-melody">
+        <span class="az-note">主旋律を抑制</span>
+      </label>
+    </div>
+
+    <button class="btn" id="copy-btn" disabled>COPY JSON</button>
+  </section>
+</div>
+
+<section class="az-panel az-wide">
+  <div class="panel-label">Timeline <span class="az-hint">クリックでシーク / 下段はビートごとのクロマ（下から C → B）</span></div>
+  <div id="timeline">
+    <div id="timeline-strip">
+      <div id="blocks"></div>
+      <canvas id="beat-canvas"></canvas>
+      <canvas id="chroma-canvas"></canvas>
+    </div>
+    <div class="az-playhead"></div>
+  </div>
+</section>
+
+<section class="az-panel az-wide">
+  <div class="panel-label">Chart</div>
+  <div id="chart"></div>
+</section>
+
+<script type="module" src="js/analyze/page.js"></script>
+</body>
+</html>
