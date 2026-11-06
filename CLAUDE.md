@@ -128,31 +128,69 @@ const state = {
 | `LOGO_FLASH_MS` | `80` | ロゴLEDフラッシュ後に緑に戻すまでの遅延（ms） |
 | `PROGRAMMER_MODE_DELAY_MS` | `150` | Programmer Mode SysEx 送信後の待機時間（ms） |
 | `CLICK_PAD_VELOCITY` | `80` | 画面パッドクリック時の固定 velocity |
+| `SMPLR_MODULE_URL` | jsDelivr の `smplr@1.1.0/dist/index.mjs` | サンプル音源ライブラリの動的 import 先 |
+| `SOUNDFONT_KIT` | `'MusyngKite'` | gleitz/midi-js-soundfonts のキット名 |
+| `SAMPLE_NOTE_RANGE` | `[21, 108]` | デコードするノート範囲（範囲外は最近傍サンプルをピッチシフト） |
+| `SAMPLE_RELEASE_S` | `0.3` | サンプル再生のデフォルトリリース時間（秒） |
+| `SAMPLE_VOLUME` | `100` | サンプル再生のマスター音量（0〜127 MIDIスケール） |
 | `METRO_ACCENT` | `{ freq: 1200, vol: 0.35, decay: 0.055 }` | メトロノームアクセント拍（1拍目）音定数 |
 | `METRO_NORMAL` | `{ freq: 700, vol: 0.18, decay: 0.040 }` | メトロノーム通常拍（2〜4拍目）音定数 |
 
 ---
 
-## Web Audio シンセ仕様
+## 音源仕様
 
-### 楽器プリセット（constants.js `INSTRUMENTS`）
+音源は2系統。**サンプル音源（GM Soundfont）が本線**で、オシレーター合成は `Synth` 音色とフォールバック用。
 
-| キー | 名称 | 特徴 |
-|------|------|------|
-| `synth` | Synth | triangle+sine、velocity対応アタック（5〜50ms）、0.8秒リリース |
-| `piano` | Piano ★デフォルト | sine+triangle、自然減衰（2秒でほぼ消音）、鍵盤離し後0.3秒リリース |
-| `organ` | Organ | 第1〜4倍音の加算合成（sine×4）、即ON/OFF（0.04秒リリース） |
-| `guitar` | Guitar | sawtooth+lowpass(2500Hz)、超高速アタック→200ms急速減衰（プラック感） |
-| `bass` | Bass | sine+lowpass(600Hz)、サブオクターブ、パンチのある低音 |
-| `strings` | Strings | sawtooth×2（+5cent detune）+lowpass(1800Hz)、スロー・アタック（0.15〜0.4秒） |
+### サンプル音源（`sampler.js` / smplr + GM Soundfont）
+- [smplr](https://github.com/danigb/smplr) を **CDN から動的 import**（`SMPLR_MODULE_URL`）。リポジトリには同梱しない
+- サンプルは gleitz/midi-js-soundfonts の `MusyngKite` キット（1音色 約2〜3.5MB の ogg）
+- **遅延ロード**: 音色を選択した時 / その音色で最初に発音した時にロード開始。ロード中は合成音で鳴る
+- **キャッシュ**: smplr の `CacheStorage`（Cache API）経由。2回目以降は即ロード
+- **フォールバック**: CDN 到達不可・ロード失敗時はその音色を `failed` に入れ、以後ずっと合成音で鳴らす（オフラインでもアプリは動く）
+- 全サンプル音色は共通の GainNode（`getSampleDestination()`）経由で出力し、`#volume` スライダーがそのゲインを直接動かす
+- **ロングトーンのループは使わない**（`loadLoopData` は常に無効）
+  - goldst.dev がループ情報を配信している音色（organ / church / violin / cello / flute / trumpet）でも、MusyngKite のサンプルには適合しない
+  - MusyngKite は全音色が **3.13 秒（137984 サンプル / 44.1kHz）の減衰録音**。どこにループ区間を取っても始点と終点で音量が食い違い、ループごとに音量が跳ねて脈打つ
+  - 個別にもループ点が壊れている: `trumpet` は全88ノートがループ長 65〜416 サンプル（2〜9ms）でピッチ無関係のブザー音、`violin` は全107ノートが `loopStart=8`（≒0秒）で弓のアタックを 200ms ごとに繰り返す、`organ` は `loopStart=7` で無音からの立ち上がりを 287ms ごとに繰り返す
+  - 結果として、押している間も **約3.1秒で自然に減衰して鳴り終わる**。無限サステインが必要なら `Synth` 系のオシレーター音色（`SYNTH_PRESETS`）を使う
+  - 将来ループを入れるなら、ループ情報付きの別サンプルセット（`Soundfont2` + .sf2）に替える必要がある
 
-### 共通仕様
+### 音色一覧（constants.js `INSTRUMENTS`）
+`{ label, gm, synth, release?, vol?, loop? }` — `gm` が GM Soundfont 音色名、`synth` が未ロード時に使う `SYNTH_PRESETS` のキー。`gm: null` はオシレーター合成のみ。
+
+| 分類 | キー |
+|------|------|
+| Keys | `piano` ★デフォルト / `epiano` / `harpsi` / `organ` / `church` |
+| Guitar / Bass | `nylon` / `steel` / `eguitar` / `abass` / `bass` |
+| Strings / Voice | `strings` / `violin` / `cello` / `choir` |
+| Mallet / Wind | `vibes` / `marimba` / `flute` / `trumpet` / `sax` |
+| Synth | `pad` / `lead` / `synth`（合成のみ） |
+
+### オシレーター合成（constants.js `SYNTH_PRESETS`）
+
+| キー | 特徴 |
+|------|------|
+| `synth` | triangle+sine、velocity対応アタック（5〜50ms）、0.8秒リリース |
+| `piano` | sine+triangle、自然減衰（2秒でほぼ消音）、鍵盤離し後0.3秒リリース |
+| `organ` | 第1〜4倍音の加算合成（sine×4）、即ON/OFF（0.04秒リリース） |
+| `guitar` | sawtooth+lowpass(2500Hz)、超高速アタック→200ms急速減衰（プラック感） |
+| `bass` | sine+lowpass(600Hz)、サブオクターブ、パンチのある低音 |
+| `strings` | sawtooth×2（+5cent detune）+lowpass(1800Hz)、スロー・アタック（0.15〜0.4秒） |
+
 - **プリセット構造**: `{ osc1, osc2?, harmonics?, envelope, peakVolFactor, filter? }`
-  - `harmonics` あり → 加算合成モード（Organ）
+  - `harmonics` あり → 加算合成モード（organ）
   - `filter` あり → BiquadFilterNode をゲインとdestinationの間に挿入
 - **エンベロープ**: `{ attackBase, attackVelRange, decayTime, sustainRatio, releaseTime }`
   - attackTime = `attackBase + (1 - velocity/127) * attackVelRange`（高velocityほど速い）
-- **`activeNotes` Map**: `{ oscNodes[], gain, ctx, releaseTime }` を格納
+
+### `activeNotes` Map
+音源2系統を `kind` で判別して同じ Map に入れる。`music.js` の `detectChordFromActiveNotes` はキー（MIDIノート番号）しか見ない。
+
+| kind | 値 |
+|------|----|
+| `'synth'` | `{ kind, oscNodes[], gain, ctx, releaseTime }` |
+| `'sample'` | `{ kind, stop }` — `stop` は smplr の `start()` が返す停止関数 |
 
 ---
 
@@ -169,7 +207,13 @@ const state = {
 | `rescanMIDI()` | `midi.js` | MIDI デバイス再スキャン（RESCAN ボタン用） |
 | `setupMIDIInput(access)` | `midi.js` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
 | `startNote(midiNote, velocity?, volume?, onNoteChange?)` | `audio.js` | Web Audioでサステイン音を開始（`activeNotes` Mapに登録）。`volume` は `#volume` スライダー値（0〜1） |
-| `stopNote(midiNote, onNoteChange?)` | `audio.js` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除） |
+| `stopNote(midiNote, onNoteChange?)` | `audio.js` | 鳴っている音にリリースをかけて停止（`activeNotes` から削除）。サンプル音は smplr の stop 関数を呼ぶ |
+| `selectInstrument(key)` | `audio.js` | 音色を切り替え、サンプル音色ならロードを先読み開始 |
+| `loadSampleInstrument(ctx, key)` | `sampler.js` | GM Soundfont 音色をロード（多重呼び出し安全・失敗しても throw しない） |
+| `startSampleNote(ctx, key, midiNote, velocity, volume)` | `sampler.js` | サンプルで発音。未ロードなら `null`（呼び出し元が合成音に回す） |
+| `usesSamples(key)` | `sampler.js` | その音色がサンプル音源を使うか（`gm` 指定あり かつ ロード失敗していない） |
+| `getSampleDestination(ctx)` | `sampler.js` | 全サンプル音色の共通出力 GainNode（ボリューム制御点） |
+| `setSamplerStatusCallback(cb)` | `sampler.js` | ロード状況（`loading` / `loaded` / `failed`）の通知先を注入 |
 | `shiftOctave(delta)` | `grid.js` | baseNote を ±12半音シフト（上段CC 91/92） |
 | `shiftCapo(delta)` | `grid.js` | baseNoteとrootを同時にシフト（視覚パターン固定の移調） |
 | `updateCapoDisplay()` | `grid.js` | Capo UIの数値表示を更新 |
@@ -197,7 +241,8 @@ js/
   constants.js   音楽理論定数・楽器プリセット・グリッド定数・buildPadData()
   state.js       グローバル state・pads (live binding)・setPads()
   logger.js      log() 関数
-  audio.js       Web Audio シンセ・メトロノーム音
+  audio.js       発音の振り分け（サンプル優先・合成フォールバック）・オシレーター合成・メトロノーム音
+  sampler.js     GM Soundfont サンプル音源（smplr を CDN から動的 import・遅延ロード・キャッシュ）
   music.js       コード/スケール計算・コード自動検出
   led.js         SysEx LED 制御
   grid.js        グリッド DOM・カポ・オクターブ操作
@@ -220,7 +265,8 @@ analyze.html / analyze.css  コード解析プロトタイプページ
 constants → (none)
 state     → constants
 logger    → (none)
-audio     → constants, state
+sampler   → constants, logger
+audio     → constants, state, sampler
 music     → constants, state
 led       → constants, state, music, logger
 grid      → constants, state, logger
@@ -240,7 +286,7 @@ main      → all
 1. Device — デバイス選択 / RESCAN / SEND / CLEAR
 2. Volume — ボリュームスライダー
 3. Metronome — BPMスライダー + 数値入力 + START/STOPボタン
-4. Sound — 楽器プリセット選択（6種）
+4. Sound — 音色選択（22種 / `#instrument-buttons`）+ ロード状況表示（`#sound-status`）。ロード中のボタンは `.loading` で点滅
 5. Log — イベントログ
 
 ### 中央パネル（Launchpad）

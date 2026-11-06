@@ -1,11 +1,14 @@
-import { INSTRUMENTS, METRO_ACCENT, METRO_NORMAL, METRO_CLICK_RAMP_S } from './constants.js';
+import { INSTRUMENTS, SYNTH_PRESETS, METRO_ACCENT, METRO_NORMAL, METRO_CLICK_RAMP_S } from './constants.js';
 import { state } from './state.js';
+import { usesSamples, startSampleNote, loadSampleInstrument } from './sampler.js';
 
 // =====================
 // Web Audio Synth
 // =====================
 let audioCtx = null;
-const activeNotes = new Map(); // midiNote → { oscNodes, gain, ctx, releaseTime }
+// midiNote → 合成音 { kind: 'synth', oscNodes, gain, ctx, releaseTime }
+//           | サンプル { kind: 'sample', stop }
+const activeNotes = new Map();
 
 export function getAudioCtx() {
   if (!audioCtx) {
@@ -33,9 +36,21 @@ export function startNote(midiNote, velocity = 64, volume = 0.5, onNoteChange) {
   const vol = volume * (velocity / 127);
   if (vol <= 0) return;
 
+  // サンプル音源が使える音色なら優先。未ロードならロードを開始し、今回は合成音で鳴らす
+  if (usesSamples(state.instrument)) {
+    const sampled = startSampleNote(ctx, state.instrument, midiNote, velocity, volume);
+    if (sampled) {
+      activeNotes.set(midiNote, sampled);
+      if (onNoteChange) onNoteChange();
+      return;
+    }
+    loadSampleInstrument(ctx, state.instrument);
+  }
+
   const freq = midiNoteToFreq(midiNote);
   const now = ctx.currentTime;
-  const inst = INSTRUMENTS[state.instrument] || INSTRUMENTS.synth;
+  const instDef = INSTRUMENTS[state.instrument] || INSTRUMENTS.synth;
+  const inst = SYNTH_PRESETS[instDef.synth] || SYNTH_PRESETS.synth;
 
   // Master gain (envelope)
   const gain = ctx.createGain();
@@ -99,7 +114,7 @@ export function startNote(midiNote, velocity = 64, volume = 0.5, onNoteChange) {
     }
   }
 
-  activeNotes.set(midiNote, { oscNodes, gain, ctx, releaseTime });
+  activeNotes.set(midiNote, { kind: 'synth', oscNodes, gain, ctx, releaseTime });
   if (onNoteChange) onNoteChange();
 }
 
@@ -107,6 +122,12 @@ export function stopNote(midiNote, onNoteChange) {
   const note = activeNotes.get(midiNote);
   if (!note) return;
   activeNotes.delete(midiNote);
+
+  if (note.kind === 'sample') {
+    note.stop();
+    if (onNoteChange) onNoteChange();
+    return;
+  }
 
   const { oscNodes, gain, ctx, releaseTime } = note;
   const t = ctx.currentTime;
@@ -116,6 +137,18 @@ export function stopNote(midiNote, onNoteChange) {
   gain.gain.exponentialRampToValueAtTime(0.001, t + releaseTime);
   oscNodes.forEach(osc => osc.stop(t + releaseTime));
   if (onNoteChange) onNoteChange();
+}
+
+/**
+ * 音色を切り替える。サンプル音源の音色なら先読みを開始する
+ * （ロード完了までは startNote が合成音にフォールバックする）。
+ */
+export function selectInstrument(instrumentKey) {
+  state.instrument = instrumentKey;
+  const inst = INSTRUMENTS[instrumentKey];
+  if (!inst || !inst.gm) return;
+  const ctx = getAudioCtx();
+  if (ctx) loadSampleInstrument(ctx, instrumentKey);
 }
 
 // =====================

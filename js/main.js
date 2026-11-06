@@ -4,7 +4,9 @@ import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS, INVERSION_LABELS,
          LOGO_FLASH_MS, METRO_LOGO_ACCENT, METRO_LOGO_NORMAL, LOGO_GREEN } from './constants.js';
 import { state, pads } from './state.js';
 import { log } from './logger.js';
-import { startNote, stopNote, getActiveNotes, playMetronomeClick } from './audio.js';
+import { startNote, stopNote, getActiveNotes, playMetronomeClick,
+         selectInstrument, getAudioCtx } from './audio.js';
+import { setSamplerStatusCallback, getSampleDestination } from './sampler.js';
 import { getChordPitchClasses, getScalePitchClasses, classifyPad,
          detectChordFromActiveNotes, getChordDisplayData } from './music.js';
 import { sendToLaunchpad, flashPressedPad, updateLogoLED, sendLogoLED, clearAllLEDs } from './led.js';
@@ -143,6 +145,7 @@ function buildButtonGroup(containerId, items, activeKey, onClick) {
   items.forEach(({ key, label }) => {
     const btn = document.createElement('button');
     btn.className = 'btn' + (key === activeKey ? ' active' : '');
+    btn.dataset.key = key;
     btn.textContent = label;
     btn.onclick = () => { onClick(key); setActive(container, btn); };
     container.appendChild(btn);
@@ -177,8 +180,31 @@ buildButtonGroup(
   'instrument-buttons',
   Object.entries(INSTRUMENTS).map(([key, val]) => ({ key, label: val.label })),
   state.instrument,
-  (key) => { state.instrument = key; }
+  (key) => selectInstrument(key)
 );
+
+// =====================
+// Sampled instrument load status
+// =====================
+const soundStatusEl = document.getElementById('sound-status');
+
+function showSoundStatus(text) {
+  soundStatusEl.textContent = text || '';
+  soundStatusEl.classList.toggle('hidden', !text);
+}
+
+setSamplerStatusCallback((instrumentKey, status) => {
+  const label = (INSTRUMENTS[instrumentKey] || {}).label || instrumentKey;
+  const btn = document.querySelector(`#instrument-buttons .btn[data-key="${instrumentKey}"]`);
+  if (btn) btn.classList.toggle('loading', status === 'loading');
+
+  if (status === 'loading')     showSoundStatus(`Loading ${label} samples…`);
+  else if (status === 'failed') showSoundStatus(`${label}: samples unavailable — using synth`);
+  else if (instrumentKey === state.instrument) showSoundStatus('');
+});
+
+// 起動時に初期音色のサンプルを先読み（AudioContext が suspended でもデコードは進む）
+selectInstrument(state.instrument);
 
 // =====================
 // DOM: Toggles
@@ -207,6 +233,8 @@ document.getElementById('capo-reset').onclick = () => shiftCapo(-state.capo);
 // =====================
 document.getElementById('volume').oninput = function() {
   document.getElementById('volume-label').textContent = this.value + '%';
+  const ctx = getAudioCtx();
+  if (ctx) getSampleDestination(ctx).gain.value = getVolume();
 };
 
 document.getElementById('metro-bpm').oninput = function() {

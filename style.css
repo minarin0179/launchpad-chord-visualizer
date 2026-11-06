@@ -126,6 +126,29 @@ header p {
   border-color: #ffaa33;
 }
 
+/* Sound: 音色ボタン（22音色あるのでコンパクトに詰める） */
+#instrument-buttons .btn {
+  font-size: 0.62rem;
+  padding: 5px 7px;
+  letter-spacing: 0.02em;
+}
+#instrument-buttons .btn.loading {
+  border-color: var(--chord-color);
+  animation: sample-loading 1s ease-in-out infinite;
+}
+@keyframes sample-loading {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* サンプル音源のロード状況 */
+.sound-status {
+  margin-top: 6px;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
 /* Toggle buttons */
 .toggle-row {
   display: flex;

@@ -40,9 +40,10 @@ export const INVERSION_LABELS = ['Root', '1st', '2nd', '3rd', '4th'];
 // =====================
 // Instrument Presets
 // =====================
-export const INSTRUMENTS = {
+// オシレーター合成プリセット
+// — `Synth` 音色、およびサンプル未ロード時 / CDN 到達不可時のフォールバックに使う
+export const SYNTH_PRESETS = {
   synth: {
-    label: 'Synth',
     osc1: { type: 'triangle' },
     osc2: { type: 'sine', detune: 6, volRatio: 1.0 },
     envelope: { attackBase: 0.005, attackVelRange: 0.045, decayTime: 0.07, sustainRatio: 0.5, releaseTime: 0.8 },
@@ -50,7 +51,6 @@ export const INSTRUMENTS = {
     filter: null,
   },
   piano: {
-    label: 'Piano',
     osc1: { type: 'sine' },
     osc2: { type: 'triangle', detune: 0, volRatio: 0.25 },
     envelope: { attackBase: 0.002, attackVelRange: 0.003, decayTime: 2.0, sustainRatio: 0.01, releaseTime: 0.3 },
@@ -58,7 +58,6 @@ export const INSTRUMENTS = {
     filter: null,
   },
   organ: {
-    label: 'Organ',
     harmonics: [1, 2, 3, 4],
     harmonicGains: [1.0, 0.6, 0.3, 0.15],
     envelope: { attackBase: 0.005, attackVelRange: 0, decayTime: 0, sustainRatio: 1.0, releaseTime: 0.04 },
@@ -66,7 +65,6 @@ export const INSTRUMENTS = {
     filter: null,
   },
   guitar: {
-    label: 'Guitar',
     osc1: { type: 'sawtooth' },
     osc2: { type: 'sine', detune: 0, volRatio: 0.3 },
     envelope: { attackBase: 0.001, attackVelRange: 0.002, decayTime: 0.2, sustainRatio: 0.03, releaseTime: 0.12 },
@@ -74,7 +72,6 @@ export const INSTRUMENTS = {
     filter: { type: 'lowpass', frequency: 2500, Q: 1 },
   },
   bass: {
-    label: 'Bass',
     osc1: { type: 'sine' },
     osc2: { type: 'triangle', detune: -1200, volRatio: 0.2 },
     envelope: { attackBase: 0.005, attackVelRange: 0.01, decayTime: 0.05, sustainRatio: 0.7, releaseTime: 0.3 },
@@ -82,7 +79,6 @@ export const INSTRUMENTS = {
     filter: { type: 'lowpass', frequency: 600, Q: 1 },
   },
   strings: {
-    label: 'Strings',
     osc1: { type: 'sawtooth' },
     osc2: { type: 'sawtooth', detune: 5, volRatio: 0.7 },
     envelope: { attackBase: 0.15, attackVelRange: 0.25, decayTime: 0, sustainRatio: 1.0, releaseTime: 1.5 },
@@ -90,6 +86,58 @@ export const INSTRUMENTS = {
     filter: { type: 'lowpass', frequency: 1800, Q: 0.7 },
   },
 };
+
+// 音色一覧（UI の Sound ボタン順）
+//   gm      : GM Soundfont の音色名（null = オシレーター合成のみ）
+//   synth   : サンプル未ロード時に使う SYNTH_PRESETS のキー
+//   release : サンプル再生のリリース時間（秒） — 省略時 SAMPLE_RELEASE_S
+//   vol     : サンプルのマスター音量（0〜127） — 省略時 SAMPLE_VOLUME
+// ※ ロングトーンのループは使わない（goldst.dev のループ情報は MusyngKite に適合しない）
+//    MusyngKite は全音色が 3.13 秒の減衰録音で、どこにループ区間を取っても始点と終点で
+//    音量が食い違い、ループごとに音量が跳ねて脈打つ。詳細は CLAUDE.md
+export const INSTRUMENTS = {
+  // Keys
+  piano:   { label: 'Piano',    gm: 'acoustic_grand_piano',   synth: 'piano' },
+  epiano:  { label: 'E.Piano',  gm: 'electric_piano_1',       synth: 'piano' },
+  harpsi:  { label: 'Harpsi',   gm: 'harpsichord',            synth: 'piano' },
+  organ:   { label: 'Organ',    gm: 'drawbar_organ',          synth: 'organ',   release: 0.08 },
+  church:  { label: 'Church',   gm: 'church_organ',           synth: 'organ',   release: 0.4 },
+  // Guitar / Bass
+  nylon:   { label: 'Nylon',    gm: 'acoustic_guitar_nylon',  synth: 'guitar' },
+  steel:   { label: 'Steel',    gm: 'acoustic_guitar_steel',  synth: 'guitar' },
+  eguitar: { label: 'E.Guitar', gm: 'electric_guitar_clean',  synth: 'guitar' },
+  abass:   { label: 'A.Bass',   gm: 'acoustic_bass',          synth: 'bass' },
+  bass:    { label: 'E.Bass',   gm: 'electric_bass_finger',   synth: 'bass' },
+  // Strings / Voice
+  strings: { label: 'Strings',  gm: 'string_ensemble_1',      synth: 'strings', release: 0.5 },
+  violin:  { label: 'Violin',   gm: 'violin',                 synth: 'strings', release: 0.4 },
+  cello:   { label: 'Cello',    gm: 'cello',                  synth: 'strings', release: 0.4 },
+  choir:   { label: 'Choir',    gm: 'choir_aahs',             synth: 'strings', release: 0.5 },
+  // Mallet / Wind
+  vibes:   { label: 'Vibes',    gm: 'vibraphone',             synth: 'piano' },
+  marimba: { label: 'Marimba',  gm: 'marimba',                synth: 'piano' },
+  flute:   { label: 'Flute',    gm: 'flute',                  synth: 'strings', release: 0.25 },
+  trumpet: { label: 'Trumpet',  gm: 'trumpet',                synth: 'organ',   release: 0.2 },
+  sax:     { label: 'Sax',      gm: 'alto_sax',               synth: 'organ',   release: 0.2 },
+  // Synth
+  pad:     { label: 'Warm Pad', gm: 'pad_2_warm',             synth: 'strings', release: 0.8 },
+  lead:    { label: 'Saw Lead', gm: 'lead_2_sawtooth',        synth: 'synth',   release: 0.2 },
+  synth:   { label: 'Synth',    gm: null,                     synth: 'synth' },
+};
+
+// =====================
+// Sampled Instruments (smplr / GM Soundfont)
+// =====================
+// smplr を CDN から動的 import する（オフライン時は合成音にフォールバック）
+export const SMPLR_MODULE_URL = 'https://cdn.jsdelivr.net/npm/smplr@1.1.0/dist/index.mjs';
+// gleitz/midi-js-soundfonts のキット名
+export const SOUNDFONT_KIT = 'MusyngKite';
+// デコードするノート範囲（ピアノ音域）— 範囲外は最近傍サンプルをピッチシフト
+export const SAMPLE_NOTE_RANGE = [21, 108];
+// サンプル再生のデフォルトリリース時間（秒）
+export const SAMPLE_RELEASE_S = 0.3;
+// サンプル再生のマスター音量（0〜127 の MIDI スケール）
+export const SAMPLE_VOLUME = 100;
 
 // =====================
 // Grid Layout
