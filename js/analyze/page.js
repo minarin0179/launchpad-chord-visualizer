@@ -4,6 +4,7 @@
 import { decodeChords, remapTimes, findSegmentIndex } from '../chord-analyzer/analyzer.js';
 import { parseVideoId, createPlayer, PlaybackClock, YT_STATE } from './youtube.js';
 import { captureTabAudio } from './capture.js';
+import { fetchSongle } from './songle.js';
 import { chordLabel, keyLabel, scaleFitRatio, suggestCapo, CAPO_POSITIONS } from '../chord-analyzer/capo.js';
 
 const PX_PER_SEC = 60;
@@ -29,7 +30,9 @@ const app = {
   videoId: null,
   features: null,   // 動画時刻にマップ済みのビート同期特徴量
   result: null,     // decodeChords の結果
-  source: null,     // 'scan' | 'file'
+  source: null,     // features の出所 'scan' | 'file'
+  songle: null,     // fetchSongle の結果（未取得 / 未登録なら null）
+  useSongle: false, // true の間は解析結果ではなく Songle のコード進行を表示
   capo: 0,
   capoAuto: true,   // true の間は解析・再デコードのたびに最適なカポを自動選択
   stopScan: null,
@@ -57,6 +60,7 @@ function setProgress(ratio) {
 
 function setBusy(busy, scanning = false) {
   $('load-btn').disabled = busy;
+  $('songle-btn').disabled = busy || !app.videoId;
   $('scan-btn').disabled = busy || !app.player;
   $('file-input').disabled = busy;
   $('file-label').classList.toggle('disabled', busy);
@@ -82,11 +86,12 @@ function waitFor(cond, timeoutMs = 10000) {
 // Cache (localStorage, videoId 単位)
 // =====================
 function saveCache() {
-  if (!app.videoId || !app.features) return;
+  if (!app.videoId || (!app.features && !app.useSongle)) return;
   try {
     localStorage.setItem(CACHE_PREFIX + app.videoId, JSON.stringify({
       features: app.features,
       source: app.source,
+      useSongle: app.useSongle,
       offsetMs: Number($('opt-offset').value),
       capo: app.capo,
       capoAuto: app.capoAuto,
@@ -121,22 +126,59 @@ async function loadVideo() {
   setBusy(false);
 
   const cached = loadCache(id);
-  if (cached?.features) {
-    app.features = cached.features;
-    app.source = cached.source;
-    setOffset(cached.offsetMs ?? 0);
-    app.capo = cached.capo ?? 0;
-    app.capoAuto = cached.capoAuto ?? true;
-    redecode();
-    setStatus(`保存済みの解析結果を読み込みました（${cached.source === 'scan' ? 'タブスキャン' : '音声ファイル'}）`, 'ok');
-  } else {
-    app.features = null;
-    app.result = null;
-    app.capo = 0;
-    app.capoAuto = true;
+  app.songle = null;
+  app.features = cached?.features ?? null;
+  app.source = cached?.source ?? null;
+  app.useSongle = false;
+  app.result = null;
+  setOffset(cached?.offsetMs ?? 0);
+  app.capo = cached?.capo ?? 0;
+  app.capoAuto = cached?.capoAuto ?? true;
+
+  // 解析済みでなければ Songle を先に試す（前回 Songle 表示だった場合も）
+  if (!app.features || cached.useSongle) {
     renderResult();
-    setStatus('SCAN でタブ音声を解析、または AUDIO FILE で音源ファイルを解析');
+    if (await loadSongle({ quiet: !!app.features })) return;
   }
+  if (app.features) {
+    redecode();
+    setStatus(`保存済みの解析結果を読み込みました（${app.source === 'scan' ? 'タブスキャン' : '音声ファイル'}）`, 'ok');
+  } else {
+    renderResult();
+    setStatus('Songle 未登録の動画です。SCAN でタブ音声を解析、または AUDIO FILE で音源ファイルを解析');
+  }
+}
+
+// =====================
+// Songle
+// =====================
+
+// Songle のコード進行に切り替える。取得できたら true
+// quiet: 未登録・失敗時にステータスを上書きしない（呼び出し元が続けて別の表示をする場合）
+async function loadSongle({ quiet = false } = {}) {
+  const videoId = app.videoId;
+  if (!videoId) return false;
+  setBusy(true);
+  setStatus('Songle からコード進行を取得中…', 'busy');
+  try {
+    app.songle ??= await fetchSongle(videoId);
+  } catch (e) {
+    if (!quiet) setStatus(`Songle から取得できません: ${e.message}`, 'error');
+    return false;
+  } finally {
+    setBusy(false);
+  }
+  if (videoId !== app.videoId) return false;  // 取得中に別の動画を読み込んだ
+  if (!app.songle) {
+    if (!quiet) setStatus('この動画は Songle に登録されていません', 'error');
+    return false;
+  }
+  app.useSongle = true;
+  saveCache();
+  redecode();
+  const { song } = app.songle;
+  setStatus(`Songle のコード進行を読み込みました${song ? `（${song.title} / ${song.artist?.name ?? '—'}）` : ''}`, 'ok');
+  return true;
 }
 
 // =====================
@@ -298,6 +340,7 @@ async function analyze(channels, sampleRate, timeScale, timeMap, source) {
     const features = await extractInWorker(channels, sampleRate, timeScale);
     app.features = remapTimes(features, timeMap);
     app.source = source;
+    app.useSongle = false;
     saveCache();
     redecode();
     setProgress(1);
@@ -318,9 +361,20 @@ function readDecodeOptions() {
   };
 }
 
+// タイムライン・ビート表示用の { duration, bounds }（Songle 表示中は Songle のビート）
+function timing() {
+  return app.useSongle ? app.songle?.timing : app.features;
+}
+
 function redecode() {
-  if (!app.features) return;
-  app.result = decodeChords(app.features, readDecodeOptions());
+  if (app.useSongle && app.songle) {
+    const { key, tempo, segments } = app.songle;
+    app.result = { key, tempo, segments };
+  } else if (app.features) {
+    app.result = decodeChords(app.features, readDecodeOptions());
+  } else {
+    return;
+  }
   if (app.capoAuto) app.capo = suggestCapo(app.result.segments);
   renderResult();
 }
@@ -348,18 +402,20 @@ function renderCapo() {
 // =====================
 function renderResult() {
   const { result, features } = app;
+  const tm = result ? timing() : null;
   const segments = result?.segments ?? [];
   app.activeIdx = -1;
 
   $('info-key').textContent = !result ? '—'
-    : app.capo === 0 ? `${result.key.label}（相関 ${result.key.confidence}）`
+    : app.capo === 0 ? `${result.key.label}（${app.useSongle ? 'コードから推定' : `相関 ${result.key.confidence}`}）`
     : `${result.key.label} → Capo ${app.capo} で ${keyLabel(result.key, app.capo)}`;
   renderCapo();
-  const jitter = features && beatJitterMs(features.bounds);
-  $('info-tempo').textContent = !result ? '—'
+  const jitter = tm && !app.useSongle ? beatJitterMs(tm.bounds) : null;
+  $('info-tempo').textContent = !result || !result.tempo ? '—'
     : `${Math.round(result.tempo)} BPM` + (jitter !== null ? `（拍間隔のばらつき ±${jitter}ms）` : '');
   $('info-segments').textContent = result ? `${segments.filter(s => s.root !== null).length}` : '—';
-  $('info-source').textContent = app.source === 'scan' ? 'タブスキャン' : app.source === 'file' ? '音声ファイル' : '—';
+  renderSource();
+  $('songle-btn').classList.toggle('active', app.useSongle);
   $('copy-btn').disabled = !result;
   $('now-chord').textContent = '—';
   $('next-chord').textContent = '—';
@@ -371,7 +427,7 @@ function renderResult() {
   chart.replaceChildren();
   app.blockEls = [];
   app.chipEls = [];
-  $('timeline-strip').style.width = features ? `${features.duration * PX_PER_SEC}px` : '0';
+  $('timeline-strip').style.width = tm ? `${tm.duration * PX_PER_SEC}px` : '0';
 
   segments.forEach((seg) => {
     const label = chordLabel(seg, app.capo);
@@ -397,8 +453,23 @@ function renderResult() {
   $('opt-center').disabled = centerCutUnavailable;
   $('opt-center-note').textContent = centerCutUnavailable ? '無効（モノラル音源）' : 'ボーカル除去';
 
-  drawChroma(features, result?.trebleKey);
-  drawBeats(features);
+  drawChroma(app.useSongle ? null : features, result?.trebleKey);
+  drawBeats(tm);
+}
+
+function renderSource() {
+  const el = $('info-source');
+  if (app.useSongle && app.songle) {
+    const { song, pageUrl } = app.songle;
+    const link = document.createElement('a');
+    link.href = pageUrl;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Songle';
+    el.replaceChildren(link, song ? `（${song.title} / ${song.artist?.name ?? '—'}）` : '');
+    return;
+  }
+  el.textContent = !app.result ? '—' : app.source === 'scan' ? 'タブスキャン' : app.source === 'file' ? '音声ファイル' : '—';
 }
 
 // 拍間隔の標準偏差（ms）。一定テンポの曲で大きければビート追跡か時刻対応が揺れている
@@ -480,7 +551,7 @@ function scheduleBeatClicks(t) {
     beatClick.next = -1;
     return;
   }
-  const { bounds } = app.features;
+  const { bounds } = timing();
   // 初回・シーク（巻き戻し or 大きな前方ジャンプ）時は予約位置を取り直す
   if (beatClick.next < 0 || t < beatClick.lastT - 0.05 || t > beatClick.lastT + 1) {
     beatClick.next = firstBeatAfter(bounds, t);
@@ -531,6 +602,17 @@ function tick() {
 $('load-btn').onclick = loadVideo;
 $('yt-url').onkeydown = (e) => { if (e.key === 'Enter') loadVideo(); };
 $('scan-btn').onclick = startScan;
+$('songle-btn').onclick = () => {
+  // Songle 表示中に押したら解析結果に戻す（解析結果が無ければ再取得）
+  if (app.useSongle && app.features) {
+    app.useSongle = false;
+    saveCache();
+    redecode();
+    setStatus(`解析結果を表示中（${app.source === 'scan' ? 'タブスキャン' : '音声ファイル'}）`, 'ok');
+  } else {
+    loadSongle();
+  }
+};
 $('file-input').onchange = (e) => {
   const [file] = e.target.files;
   if (file) analyzeFile(file);
@@ -541,6 +623,8 @@ for (const id of ['opt-vocab', 'opt-stay', 'opt-bass', 'opt-center', 'opt-hpss',
   $(id).oninput = () => {
     $('opt-stay-value').textContent = Number($('opt-stay').value).toFixed(2);
     $('opt-bass-value').textContent = Number($('opt-bass').value).toFixed(2);
+    // デコード設定は解析結果に対するものなので、Songle 表示中なら解析結果に戻す
+    if (app.useSongle && app.features) { app.useSongle = false; saveCache(); }
     redecode();
   };
 }

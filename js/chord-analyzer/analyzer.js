@@ -594,6 +594,11 @@ function estimateKey(treble, bass) {
   treble.forEach((t, i) => {
     for (let pc = 0; pc < 12; pc++) profile[pc] += t[pc] + 0.5 * bass[i][pc];
   });
+  return keyFromProfile(profile);
+}
+
+// 12 次元のピッチクラス分布から Krumhansl-Kessler 相関で最も近いキーを返す
+export function keyFromProfile(profile) {
   let best = { root: 0, mode: 'major', r: -Infinity };
   for (const mode of ['major', 'minor']) {
     for (let root = 0; root < 12; root++) {

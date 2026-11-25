@@ -11,7 +11,7 @@
 
 <header>
   <h1>Chord Analyzer // YouTube</h1>
-  <p>曲全体のコード進行を解析して再生に同期表示（プロトタイプ） — <a href="index.html">Visualizer に戻る</a></p>
+  <p>曲全体のコード進行を解析 / Songle から取得して再生に同期表示（プロトタイプ） — <a href="index.html">Visualizer に戻る</a></p>
 </header>
 
 <div class="az-layout">
@@ -32,8 +32,9 @@
       <button class="btn" id="scan-btn" disabled>● SCAN</button>
       <button class="btn" id="stop-btn" disabled>■ STOP</button>
       <label class="btn" id="file-label">AUDIO FILE<input type="file" id="file-input" accept="audio/*" hidden></label>
+      <button class="btn" id="songle-btn" disabled title="Songle に登録済みのコード進行を表示（解析結果と切替）">SONGLE</button>
     </div>
-    <div id="status" class="az-status">YouTube の URL を入力して LOAD</div>
+    <div id="status" class="az-status">YouTube の URL を入力して LOAD（Songle 登録曲はコード進行を自動取得）</div>
     <div class="az-progress"><div id="progress-bar"></div></div>
   </section>
 

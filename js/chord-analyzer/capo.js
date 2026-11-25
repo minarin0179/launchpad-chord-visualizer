@@ -13,10 +13,18 @@ function shiftPC(pc, capo) {
   return ((pc - capo) % 12 + 12) % 12;
 }
 
-// セグメントのカポ適用後の表示名（N.C. はそのまま）
+// セグメントの構成音（ルートからの音程）。CHORD_TYPES に無い型（Songle の mM7 など）は
+// segment.intervals を持つ
+function segmentIntervals(segment) {
+  return segment.intervals ?? CHORD_TYPES[segment.type].intervals;
+}
+
+// セグメントのカポ適用後の表示名（N.C. はそのまま、分数コードはベース音も移調）
 export function chordLabel(segment, capo) {
   if (segment.root === null) return segment.label;
-  return NOTE_NAMES[shiftPC(segment.root, capo)] + CHORD_TYPES[segment.type].symbol;
+  const symbol = segment.symbol ?? CHORD_TYPES[segment.type].symbol;
+  const bass = segment.bass != null ? `/${NOTE_NAMES[shiftPC(segment.bass, capo)]}` : '';
+  return NOTE_NAMES[shiftPC(segment.root, capo)] + symbol + bass;
 }
 
 export function keyLabel(key, capo) {
@@ -29,7 +37,8 @@ export function scaleFitRatio(segments, capo) {
   for (const s of segments) {
     if (s.root === null) continue;
     const d = s.end - s.start;
-    const pcs = new Set(CHORD_TYPES[s.type].intervals.map(iv => shiftPC(s.root + iv, capo)));
+    const pcs = new Set(segmentIntervals(s).map(iv => shiftPC(s.root + iv, capo)));
+    if (s.bass != null) pcs.add(shiftPC(s.bass, capo));
     for (const pc of pcs) {
       total += d;
       if (REFERENCE_SCALE.has(pc)) inScale += d;
