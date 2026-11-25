@@ -86,6 +86,7 @@ const state = {
   metronome: false,    // メトロノームON/OFF
   // --- Song バー連動（js/song.js が更新）---
   follow: false,       // FOLLOW 中は再生位置のコードで root / chordType を自動更新
+  practice: false,     // 練習モード（弾くコードだけ点灯。FOLLOW OFF で自動 OFF）
   chordOverride: null, // { intervals?, symbol?, bassPC?, none? } — CHORD_TYPES に無い構成音・分数コードのベース・N.C.
   scaleRoot: null,     // スケール基準音（null = コードのルート、FOLLOW 中は曲のキー）
   preview: null,       // 次のコード予告 { rootPC, pcs[] }
@@ -98,17 +99,46 @@ const state = {
 #### コード進行のソース
 | ソース | 取得元 | 備考 |
 |--------|--------|------|
-| Songle | `https://widget.songle.jp/api/v1/song.json` / `song/chord.json` / `song/beat.json`（`?url=www.youtube.com/watch?v=<id>`） | CORS 許可。時刻は動画基準の ms。未登録は 404 → `null`。キーは返らないのでコード構成音から推定 |
-| 解析結果 | localStorage `chord-analyzer:v2:<videoId>`（analyze.html が保存） | 既定オプションで `decodeChords`。保存済みの Offset を適用 |
+| Songle | 曲情報 `https://api.songle.jp/api/v2/song.json?url=…` → コード・ビート `https://widget.songle.jp/api/v1/song/chord.json` / `song/beat.json`（`?url=<v2 の permalink>`） | CORS 許可。URL は YouTube / ニコニコ / SoundCloud / ピアプロ（スキームなしでも可）。v2 は版（日付）なしのピアプロ URL を最新版に解決する（v1 は不可）。時刻は再生メディア基準の ms。未登録は 404 → `null`。キーは返らないのでコード構成音から推定 |
+| 解析結果 | localStorage `chord-analyzer:v2:<videoId>`（analyze.html が保存） | YouTube のみ。既定オプションで `decodeChords`。保存済みの Offset を適用 |
 
+- **Songle 未登録の曲は読み込まない**（「Songle に登録されていない曲です」を表示）。プレイヤーが Songle の埋め込みプレイヤーなので、解析結果も Songle 登録済みの YouTube 曲でのみ使える
 - 選択の優先順: 解析結果が「Songle ではなく解析結果を表示中」で保存されていれば解析結果、それ以外は Songle → 解析結果。両方あればセレクトで切替
 - Songle のコード名の変換: `M7`→`maj7`、`m7b5`/`m7-5`→`m7b5`、`sus`→`sus4`、`+`→`aug` など。`CHORD_TYPES` に無い型（`mM7` / `7sus4` / `aug7` / `7b5` ほか）は Songle の表記をそのまま表示に使い、構成音は既知のものだけ定義（未知は先頭 `m` ならマイナー三和音、それ以外はメジャー三和音）。同じコードが続く区間は 1 つにまとめる
+
+#### 再生メディア（`js/song-media.js`）
+| 対応 | URL の例 | プレイヤー |
+|------|----------|-----------|
+| YouTube | `youtube.com/watch?v=` / `youtu.be/` | Songle 埋め込みプレイヤー（`https://widget.songle.jp/v1/api.js` の `SongleWidgetAPI.createSongleWidgetElement`） |
+| ニコニコ動画 | `nicovideo.jp/watch/sm…` / `nico.ms/sm…` | 同上 |
+| ピアプロ | `piapro.jp/t/<id>`（`/<日付>` 付きも可） | 同上（mp3 モード。音源は Songle 経由の試聴 mp3） |
+| SoundCloud | `soundcloud.com/<user>/<track>` | SoundCloud Widget API（`https://w.soundcloud.com/player/api.js`）。Songle 経由の音源 URL は SoundCloud の廃止 API を指していて 401 になるため |
+
+- どちらも `{ kind, getTime() 秒, isPlaying(), play(), pause(), seek(秒), destroy() }` に揃える。Songle の `position` は補間済み、SoundCloud は `PLAY_PROGRESS` の報告を `performance.now()` で補間
+- Songle Widget は `div#songle-widget`（id 固定）を widgets.js が拾う仕組みなので、同時に 1 つだけ。曲を替えるときは `destroy()`（`widget.remove()`）してから作り直す
+- URL の形でない入力は Songle のキーワード検索（`https://widget.songle.jp/api/v1/songs/search.json?q=`、最大 40 件・該当なしは 404）。結果のうち対応メディアのものを候補リスト（`#song-results`）に出し、クリックで読み込み
+- 読込後の URL: YouTube は `?v=<動画ID>`、それ以外は `?url=<URL>`。どちらも起動時に自動読込
+- 解析ページ（ANALYZE ↗）は YouTube のときだけ表示
 
 #### FOLLOW
 - ソースを読み込むと自動で ON。再生位置のセグメントを `state.root` / `chordType` / `chordOverride` に適用（一時停止中のシークでも追従）
 - N.C.（`N`）とコードの無い区間は `chordOverride = { none: true }` → ルート・コードトーンは消灯し、スケールだけ表示
 - スケールは曲のキー基準（`scaleRoot = key.root`、`scale` は major / minor）。FOLLOW OFF で `scaleRoot = null`（コードのルート基準に戻る）
 - 次コードの予告: FOLLOW 中・再生中のみ、次のセグメントがコードあり かつ 今と別のコードで、開始まで 1 拍（`60 / tempo`、不明時 0.5 秒）以内のとき。今のコードで root / chord / bass として光っていないパッドにだけ重ねる
+
+#### PRACTICE（練習モード）
+- 光る電子ピアノのように、弾くコードだけを点灯（ルート / コードトーン / 分数コードのベース）。スケール・次コードの予告は消灯、N.C. は全消灯
+- 点灯は **基本形（転回なし）のボイシング 1 つ**（`music.js` の `practiceNotes`）
+  - ルートは基準パッド `PRACTICE_ANCHOR`（下から 3 段目・左から 3 列目、デフォルト配置で C3）から 1 オクターブ以内（C3〜B3）
+  - 構成音はルートから `intervals` をそのまま積む（ルートが最低音。9th などはオクターブを超えた高さ）
+  - 分数コードのベースはルートより下の最も近い音
+  - **同じ音（MIDI ノート番号）が出るパッドは全部光らせる**（押さえる位置は弾く人が選ぶ）
+  - 色は音名ではなく音の高さごとの役割（例: C/G の G2 は bass、G3 は chord）
+  - カポ・オクターブで範囲も一緒に動く（形は固定）
+- そのため分類関数は `classify(pc, pad)` とパッドも受け取る（pad を渡さない呼び出しは音名だけで分類）
+- コードの切り替えは `PRACTICE_LEAD_BEATS`（0.5 拍）前倒し（NOW 表示も同じコード）
+- `createPadClassifier` が `state.practice` を見てスケールを消し、コードトーンを `showChord` に関係なく表示
+- ON にすると FOLLOW も ON。FOLLOW を OFF にする（手動のコード操作による一時停止を含む）と PRACTICE も OFF
 
 #### Transport
 - 1小節戻る: 現在位置から 4 拍分（`4 × 60 / tempo`）戻る
@@ -189,6 +219,8 @@ const state = {
 | `METRO_NORMAL` | `{ freq: 700, vol: 0.18, decay: 0.040 }` | メトロノーム通常拍（2〜4拍目）音定数 |
 | `CC_PLAY` / `CC_BACK` / `CC_FOLLOW` / `CC_LOOP` | `95` / `96` / `97` / `98` | 上段 Song ボタンの CC |
 | `SONG_BTN_COLORS` | `{ idle, playing, paused, back, follow, loopA, loopOn }` | 上段 Song ボタンの LED 色（下記「Song バー仕様」） |
+| `PRACTICE_LEAD_BEATS` | `0.5` | 練習モードで次のコードに切り替える前倒し量（拍） |
+| `PRACTICE_ANCHOR` | `{ row: 2, col: 2 }` | 練習モードの基準パッド（ここから 1 オクターブ以内にルートを置く） |
 | `SONG_PREVIEW_BLINK_MS` | `150` | 次コード予告の Launchpad 点滅の半周期（ms）。画面側は CSS で 0.3 秒周期 |
 
 ---
@@ -257,11 +289,15 @@ const state = {
 | `buildGridDOM(onPadDown, onPadUp, onAfterRebuild)` | `grid.js` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
 | `updateAll()` | `main.js` | 画面更新 + Launchpad LED送信の中心関数 |
 | `getChordPitchClasses()` | `music.js` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音 or 分数コードのベースのPC（無ければ `null`）。`chordOverride` を反映 |
-| `createPadClassifier({ ledPhase? })` | `music.js` | 現在の state から `pc → 'root' / 'bass' / 'chord' / 'scale' / 'next-root' / 'next-chord' / 'off'` を返す関数を作る（DOM・LED 共通） |
+| `createPadClassifier({ ledPhase? })` | `music.js` | 現在の state から `(pc, pad?) → 'root' / 'bass' / 'chord' / 'scale' / 'next-root' / 'next-chord' / 'off'` を返す関数を作る（DOM・LED 共通。練習モードは pad の位置で絞り込む） |
 | `sendToLaunchpad({ quiet? })` | `led.js` | 現在の state から全パッド + 上段の LED を SysEx で一括送信（`quiet` でログ抑制） |
-| `initSong({ onUpdate, onLEDs })` | `song.js` | Song バー初期化（YouTube・Songle / 解析結果・FOLLOW・カポ連動・CC 95-98・`?v=` 自動読込） |
+| `initSong({ onUpdate, onLEDs })` | `song.js` | Song バー初期化（Songle 検索・再生メディア・Songle / 解析結果・FOLLOW・カポ連動・CC 95-98・`?v=` / `?url=` 自動読込） |
 | `pauseFollow()` | `song.js` | 手動のコード操作時に FOLLOW を一時停止 |
-| `fetchSongle(videoId)` | `analyze/songle.js` | Songle から曲情報・コード・ビートを取得し `{ song, pageUrl, key, tempo, segments, timing }` を返す（未登録は `null`） |
+| `fetchSongle(source)` | `analyze/songle.js` | Songle から曲情報・コード・ビートを取得し `{ song, pageUrl, key, tempo, segments, timing }` を返す（`source` は YouTube の動画ID か Songle が扱う URL。未登録は `null`） |
+| `fetchSongleSong(source)` | `analyze/songle.js` | v2 の曲情報 `{ title, artist, duration, permalink, code, url }`（ピアプロの版なし URL を解決） |
+| `searchSongle(query)` | `analyze/songle.js` | Songle のキーワード検索 `[{ title, artist, permalink, duration }]` |
+| `parseMediaUrl(input)` | `song-media.js` | URL → `{ kind: 'youtube' \| 'niconico' \| 'soundcloud' \| 'piapro', id, songleUrl }`（URL でなければ `null` = 検索） |
+| `createMediaPlayer(container, media, { onStateChange })` | `song-media.js` | 共通インターフェースのプレイヤーを生成（Songle 埋め込み / SoundCloud Widget） |
 | `parseSongleChord(name)` | `analyze/songle.js` | Songle のコード名（`Eb` / `C#m7` / `Ebsus2/Ab` / `N`）を analyzer のセグメント形式に変換 |
 | `keyFromProfile(profile)` | `chord-analyzer/analyzer.js` | 12 次元ピッチクラス分布から Krumhansl-Kessler 相関でキーを推定 |
 | `initMIDI(callbacks)` | `midi.js` | MIDI初期化・デバイス列挙・コールバック注入の統合エントリ（`setupMIDIInput` を内部で呼ぶ） |
@@ -309,7 +345,8 @@ js/
   grid.js        グリッド DOM・カポ・オクターブ操作
   midi.js        MIDI デバイス管理・入力ハンドリング
   main.js        エントリーポイント・updateAll・メトロノーム・全体統合
-  song.js        Song バー（YouTube 再生 + コード進行で FOLLOW 点灯・カポ一本化・次コード予告・A-B ループ・CC 95-98）
+  song.js        Song バー（Songle 検索・曲の再生 + コード進行で FOLLOW 点灯・カポ一本化・次コード予告・A-B ループ・CC 95-98）
+  song-media.js  Song バーの再生メディア（YouTube / ニコニコ / ピアプロ = Songle 埋め込みプレイヤー、SoundCloud = Widget API）・URL 判定
   chord-analyzer/  オーディオ → コード進行解析（DOM 非依存、Worker / Node で動作）
     dsp.js         FFT・ダウンサンプル
     analyzer.js    extractFeatures（ビート同期クロマ。センターカット / HPSS / メロディ抑制の全組み合わせを事前計算）/ decodeChords（バリアント選択 + キー推定 + Viterbi）
@@ -318,7 +355,7 @@ js/
   analyze/       YouTube 同期解析ページ（analyze.html）用
     youtube.js     IFrame Player API ラッパー・補間付き再生時刻
     capture.js     タブ音声キャプチャ（getDisplayMedia + AudioWorklet）
-    songle.js      Songle 公開 API（widget.songle.jp/api/v1、CORS 可）から登録済み曲のコード・ビートを取得し、analyzer と同じセグメント形式に変換
+    songle.js      Songle 公開 API（api.songle.jp/api/v2 の曲情報 + widget.songle.jp/api/v1 のコード・ビート・検索、CORS 可）から登録済み曲を取得し、analyzer と同じセグメント形式に変換
     page.js        スキャン → 解析 → タイムライン同期表示。LOAD 時に解析キャッシュが無ければ Songle を自動取得（SONGLE ボタンで解析結果と切替）
 analyze.html / analyze.css  コード解析プロトタイプページ
 ```
@@ -334,7 +371,8 @@ music     → constants, state
 led       → constants, state, music, logger
 grid      → constants, state, logger
 midi      → constants, state, grid, logger
-song      → constants, state, logger, grid, led, analyze/youtube, analyze/songle, chord-analyzer/capo, chord-analyzer/analyzer
+song-media → analyze/youtube
+song      → constants, state, logger, grid, led, song-media, analyze/songle, chord-analyzer/capo, chord-analyzer/analyzer
 main      → all
 ```
 
@@ -344,7 +382,7 @@ main      → all
 
 ## UI構成（三段組レイアウト）
 
-上段（全幅）: ヘッダー + MIDIステータス + **Song バー**（URL / LOAD / ソース選択 / ANALYZE ↗ / ▾ 折りたたみ。読込後に YouTube プレイヤー・NOW/NEXT・KEY/TEMPO・CAPO（AUTO）・▶ / ◄◄ / FOLLOW / A-B・タイムライン）
+上段（全幅）: ヘッダー + MIDIステータス + **Song バー**（URL or 検索語 / LOAD・SEARCH / ソース選択 / ANALYZE ↗ / ▾ 折りたたみ / 検索候補リスト。読込後にプレイヤー（Songle 埋め込み or SoundCloud）・NOW/NEXT・KEY/TEMPO・CAPO（AUTO）・▶ / ◄◄ / FOLLOW / A-B・タイムライン）
 
 ### 左パネル（MIDI / Audio / Debug）
 1. Device — デバイス選択 / RESCAN / SEND / CLEAR

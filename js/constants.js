@@ -198,6 +198,8 @@ export const SONG_BTN_COLORS = {
   loopOn:   [110, 0, 110],
 };
 export const SONG_PREVIEW_BLINK_MS = 150;  // 次コード予告の Launchpad 点滅周期（半周期）
+export const PRACTICE_LEAD_BEATS = 0.5;    // 練習モード: コードが変わる何拍前に次のコードへ切り替えて光らせるか
+export const PRACTICE_ANCHOR = { row: 2, col: 2 };  // 練習モードの基準パッド（下から 3 段目・左から 3 列目。デフォルト配置で C3）。ここから 1 オクターブの範囲に光らせる
 // Metronome logo flash colors (RGB)
 export const METRO_LOGO_ACCENT = [127, 127, 127];
 export const METRO_LOGO_NORMAL = [60, 80, 100];

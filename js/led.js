@@ -22,8 +22,8 @@ export function updateLogoLED() {
 // =====================
 // Pad LED Color
 // =====================
-export function getPadLEDColor(pitchClass) {
-  return COLORS[createPadClassifier({ ledPhase: true })(pitchClass)];
+export function getPadLEDColor(pitchClass, pad) {
+  return COLORS[createPadClassifier({ ledPhase: true })(pitchClass, pad)];
 }
 
 // 上段 CC 95-98 の色は Song 側が決める（index 4〜7 → RGB、null なら消灯色）
@@ -41,8 +41,11 @@ export function flashPressedPad(pad, isPressed) {
     const [r, g, b] = COLORS.pressed;
     samePCs.forEach(p => updates.push({ type: 'rgb', pad: p.launchpadNote, r, g, b }));
   } else {
-    const [r, g, b] = getPadLEDColor(pad.pitchClass);
-    samePCs.forEach(p => updates.push({ type: 'rgb', pad: p.launchpadNote, r, g, b }));
+    const classify = createPadClassifier({ ledPhase: true });
+    samePCs.forEach(p => {
+      const [r, g, b] = COLORS[classify(p.pitchClass, p)];
+      updates.push({ type: 'rgb', pad: p.launchpadNote, r, g, b });
+    });
   }
   if (updates.length > 0) {
     try { state.device.sendLEDs(updates); } catch(e) { log('MIDI send error: ' + e.message, 'err'); }
@@ -58,7 +61,7 @@ export function sendToLaunchpad({ quiet = false } = {}) {
   const classify = createPadClassifier({ ledPhase: true });
 
   pads.forEach(pad => {
-    const [r, g, b] = COLORS[classify(pad.pitchClass)];
+    const [r, g, b] = COLORS[classify(pad.pitchClass, pad)];
     updates.push({ type: 'rgb', pad: pad.launchpadNote, r, g, b });
   });
 

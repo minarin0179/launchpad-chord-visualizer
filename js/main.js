@@ -62,7 +62,7 @@ function updateAll({ quiet = false } = {}) {
   // 視覚状態のキーを生成し、変化がなければ DOM 更新をスキップ
   // （SENDボタン用に LED 送信は常時実行）
   const key = [state.root, state.chordType, state.inversion, state.showChord, state.showScale,
-    state.showInversion, state.scale, state.baseNote, state.scaleRoot,
+    state.showInversion, state.scale, state.baseNote, state.scaleRoot, state.practice,
     JSON.stringify(state.chordOverride), JSON.stringify(state.preview)].join('|');
   if (key !== _prevUpdateKey) {
     _prevUpdateKey = key;
@@ -75,7 +75,7 @@ function updateAll({ quiet = false } = {}) {
     pads.forEach((pad, idx) => {
       const el = padEls[idx];
       if (!el) return;
-      el.className = `pad ${classify(pad.pitchClass)}`;
+      el.className = `pad ${classify(pad.pitchClass, pad)}`;
     });
 
     // Root / Chord / Scale ボタンの active 状態（Song の FOLLOW でも変わるので毎回同期）

@@ -15,16 +15,17 @@
 
 <div id="midi-status" class="searching">Searching for MIDI...</div>
 
-<!-- Song: YouTube + chord progression (Songle / analysis) synced to pads & Launchpad -->
+<!-- Song: YouTube / niconico / SoundCloud / piapro + chord progression (Songle / analysis) synced to pads & Launchpad -->
 <section id="song-bar" class="song-bar">
   <div class="song-head">
     <span class="panel-label song-title">Song</span>
-    <input id="song-url" type="url" placeholder="YouTube URL — chords from Songle or ANALYZE">
-    <button class="btn" id="song-load">LOAD</button>
+    <input id="song-url" type="text" placeholder="Song title / artist to search Songle, or YouTube・niconico・SoundCloud・piapro URL">
+    <button class="btn" id="song-load">LOAD / SEARCH</button>
     <select id="song-source" disabled title="Chord source"></select>
     <a id="song-analyze-link" class="song-link" href="analyze.html" target="_blank" rel="noopener">ANALYZE ↗</a>
     <button class="btn song-collapse" id="song-collapse" title="Collapse">▾</button>
   </div>
+  <ul id="song-results" class="song-results" hidden></ul>
   <div id="song-body" class="song-body" hidden>
     <div class="song-main">
       <div class="song-player-wrap"><div id="song-player"></div></div>
@@ -56,6 +57,7 @@
           <button class="btn" id="song-play" title="Play / Pause (Launchpad CC95)">▶</button>
           <button class="btn" id="song-back" title="Back 1 bar (CC96)">◄◄</button>
           <button class="btn" id="song-follow" disabled title="Light the pads with the song's chords (CC97)">FOLLOW</button>
+          <button class="btn" id="song-practice" disabled title="Practice: light only the chord to play (no scale, no preview), half a beat early">PRACTICE</button>
           <button class="btn" id="song-loop-btn" title="A-B loop: set A → set B → clear (CC98)">A-B</button>
         </div>
         <div id="song-status" class="song-status"></div>

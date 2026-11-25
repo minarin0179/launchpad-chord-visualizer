@@ -1,6 +1,8 @@
 // =====================
-// Song バー — YouTube 再生 + コード進行（Songle / 解析結果）をメイン画面と Launchpad に連動させる
+// Song バー — 曲の再生 + コード進行（Songle / 解析結果）をメイン画面と Launchpad に連動させる
 //
+// - 再生は js/song-media.js（YouTube / ニコニコ / ピアプロ = Songle 埋め込みプレイヤー、SoundCloud = Widget API）
+// - URL 以外を入れると Songle をキーワード検索して候補を出す
 // - FOLLOW 中は再生位置のコードを state.root / chordType / chordOverride に流し込む
 // - カポは state.capo に一本化（曲のカポ = メイン画面のカポ。Launchpad はカポ後の形で光り、音は実音）
 // - FOLLOW 中のスケールは曲のキー基準（state.scaleRoot）
@@ -8,13 +10,13 @@
 // - 上段 CC 95-98: 再生/一時停止・1小節戻る・FOLLOW・A-B ループ
 // =====================
 import { CHORD_TYPES, CC_PLAY, CC_BACK, CC_FOLLOW, CC_LOOP,
-         SONG_BTN_COLORS, SONG_PREVIEW_BLINK_MS } from './constants.js';
+         SONG_BTN_COLORS, SONG_PREVIEW_BLINK_MS, PRACTICE_LEAD_BEATS } from './constants.js';
 import { state } from './state.js';
 import { log } from './logger.js';
 import { shiftCapo, setCapoListener, setExtraTopRowHandler, topRowEls } from './grid.js';
 import { setTopRowColorProvider } from './led.js';
-import { parseVideoId, createPlayer, PlaybackClock, YT_STATE } from './analyze/youtube.js';
-import { fetchSongle } from './analyze/songle.js';
+import { parseMediaUrl, mediaPageUrl, createMediaPlayer, MEDIA_LABELS } from './song-media.js';
+import { fetchSongle, searchSongle } from './analyze/songle.js';
 import { chordLabel, keyLabel, suggestCapo, CAPO_POSITIONS } from './chord-analyzer/capo.js';
 import { decodeChords, findSegmentIndex } from './chord-analyzer/analyzer.js';
 import { TOP_ROW_CCS } from '../packages/launchpad-x/dist/index.js';
@@ -29,9 +31,9 @@ const $ = (id) => document.getElementById(id);
 const mod12 = (n) => ((n % 12) + 12) % 12;
 
 const song = {
-  player: null,
-  clock: null,
-  videoId: null,
+  player: null,         // song-media.js のプレイヤー（{ getTime, isPlaying, play, pause, seek, destroy }）
+  media: null,          // parseMediaUrl の結果
+  loadSeq: 0,           // 読み込み中に別の曲を読み込んだら古い結果を捨てる
   sources: {},          // { songle?, analysis? } → { label, key, tempo, segments, timing, offset }
   sourceKey: null,
   capoAuto: true,
@@ -56,11 +58,11 @@ function capoPos() {
 }
 
 function isPlaying() {
-  return song.player?.getPlayerState?.() === YT_STATE.PLAYING;
+  return !!song.player?.isPlaying();
 }
 
 function songTime() {
-  return song.clock ? song.clock.now() + (current()?.offset ?? 0) : 0;
+  return song.player ? song.player.getTime() + (current()?.offset ?? 0) : 0;
 }
 
 function beatSec() {
@@ -99,51 +101,117 @@ function loadAnalysisCache(videoId) {
 }
 
 async function loadSong() {
-  const id = parseVideoId($('song-url').value);
-  if (!id) { setStatus('Invalid YouTube URL', 'error'); return; }
-  song.videoId = id;
+  const input = $('song-url').value.trim();
+  if (!input) return;
+  const media = parseMediaUrl(input);
+  if (!media) { searchSongs(input); return; }
+  hideResults();
+  $('song-url').value = mediaPageUrl(media);
+
+  const seq = ++song.loadSeq;
+  song.media = media;
   song.sources = {};
   song.sourceKey = null;
   song.loop = { a: null, b: null };
   setFollow(false, { update: false });
+  song.player?.destroy();
+  song.player = null;
+  $('song-player').replaceChildren();
+
   const params = new URLSearchParams(location.search);
-  params.set('v', id);
+  params.delete('v');
+  params.delete('url');
+  if (media.kind === 'youtube') params.set('v', media.id);
+  else params.set('url', mediaPageUrl(media));
   history.replaceState(null, '', `?${params}`);
-  $('song-analyze-link').href = `analyze.html?v=${id}`;
+  // 解析ページは YouTube 専用
+  $('song-analyze-link').hidden = media.kind !== 'youtube';
+  $('song-analyze-link').href = media.kind === 'youtube' ? `analyze.html?v=${media.id}` : 'analyze.html';
   $('song-body').hidden = false;
   $('song-bar').classList.remove('collapsed');
 
-  if (song.player) {
-    song.player.cueVideoById(id);
-  } else {
-    setStatus('Loading player…', 'busy');
-    song.player = await createPlayer('song-player', id, { onStateChange: onPlayerState });
-    song.clock = new PlaybackClock(song.player);
-  }
-
   setStatus('Fetching chords…', 'busy');
-  const analysis = loadAnalysisCache(id);
-  if (analysis) song.sources.analysis = analysis;
+  let songle = null;
   try {
-    const s = await fetchSongle(id);
-    if (s) {
-      const by = s.song ? ` — ${s.song.title} / ${s.song.artist?.name ?? '?'}` : '';
-      song.sources.songle = { ...s, label: `Songle${by}`, offset: 0 };
-    }
+    songle = await fetchSongle(media.songleUrl);
   } catch (e) {
     log(`Songle fetch failed: ${e.message}`, 'err');
   }
-  if (id !== song.videoId) return;  // 取得中に別の動画を読み込んだ
+  if (seq !== song.loadSeq) return;  // 取得中に別の曲を読み込んだ
 
-  renderSourceSelect();
-  const pick = analysis?.preferred || !song.sources.songle ? (analysis ? 'analysis' : null) : 'songle';
-  if (!pick) {
+  if (!songle) {
+    renderSourceSelect();
     renderAll();
-    setStatus('No chords: not on Songle and not analyzed yet — use ANALYZE ↗ to scan', 'error');
-    refreshLEDs();
+    setStatus(`Songle に登録されていない曲です（${MEDIA_LABELS[media.kind]}）`, 'error');
     return;
   }
-  selectSource(pick);
+  const by = ` — ${songle.song.title} / ${songle.song.artist.name || '?'}`;
+  song.sources.songle = { ...songle, label: `Songle${by}`, offset: 0 };
+  const analysis = media.kind === 'youtube' ? loadAnalysisCache(media.id) : null;
+  if (analysis) song.sources.analysis = analysis;
+  renderSourceSelect();
+  selectSource(analysis?.preferred ? 'analysis' : 'songle');
+
+  try {
+    const player = await createMediaPlayer($('song-player'), media, { onStateChange: onPlayerState });
+    if (seq !== song.loadSeq) { player.destroy(); return; }
+    song.player = player;
+    song.activeIdx = -2;
+  } catch (e) {
+    if (seq !== song.loadSeq) return;
+    setStatus(`Player error: ${e.message}`, 'error');
+    log(`Song player failed: ${e.message}`, 'err');
+  }
+  refreshLEDs();
+}
+
+// =====================
+// Songle 検索（URL 以外が入力されたとき）
+// =====================
+async function searchSongs(query) {
+  const seq = ++song.loadSeq;
+  setStatus(`Searching Songle for "${query}"…`, 'busy');
+  let results;
+  try {
+    results = await searchSongle(query);
+  } catch (e) {
+    setStatus(`Search failed: ${e.message}`, 'error');
+    return;
+  }
+  if (seq !== song.loadSeq) return;
+  const list = $('song-results');
+  list.replaceChildren();
+  const playable = results.map(r => ({ ...r, media: parseMediaUrl(r.permalink) })).filter(r => r.media);
+  if (!playable.length) {
+    hideResults();
+    setStatus(`No songs found on Songle for "${query}"`, 'error');
+    return;
+  }
+  for (const r of playable) {
+    const li = document.createElement('li');
+    const kind = document.createElement('span');
+    kind.className = `song-result-kind ${r.media.kind}`;
+    kind.textContent = MEDIA_LABELS[r.media.kind];
+    const title = document.createElement('span');
+    title.className = 'song-result-title';
+    title.textContent = r.title;
+    const meta = document.createElement('span');
+    meta.className = 'song-result-meta';
+    meta.textContent = `${r.artist} · ${formatSec(r.duration)}`;
+    li.append(kind, title, meta);
+    li.onclick = () => {
+      $('song-url').value = mediaPageUrl(r.media);
+      loadSong();
+    };
+    list.appendChild(li);
+  }
+  list.hidden = false;
+  setStatus(`${playable.length} songs found — pick one`, 'ok');
+}
+
+function hideResults() {
+  $('song-results').hidden = true;
+  $('song-results').replaceChildren();
 }
 
 function selectSource(key) {
@@ -187,10 +255,24 @@ function setFollow(on, { update = true } = {}) {
   } else {
     state.chordOverride = null;
     state.scaleRoot = null;
+    state.practice = false;  // 練習モードは FOLLOW 前提
     setPreview(null);
   }
   $('song-follow').classList.toggle('active', on);
+  $('song-practice').classList.toggle('active', state.practice);
   if (update) _onUpdate({ quiet: true });
+}
+
+// 練習モード: 弾くコードだけを光らせる（光る電子ピアノ風）。ON で FOLLOW も ON
+function setPractice(on) {
+  if (on && !current()) return;
+  state.practice = on;
+  if (on) setPreview(null);
+  if (on && !state.follow) setFollow(true, { update: false });
+  song.activeIdx = -2;
+  $('song-practice').classList.toggle('active', on);
+  log(`Song: practice ${on ? 'ON' : 'OFF'}`, 'out');
+  _onUpdate({ quiet: true });
 }
 
 // 手動でコードを選んだら FOLLOW を一時停止（main.js から呼ぶ。updateAll は呼び出し元が行う）
@@ -241,13 +323,13 @@ function setPreview(seg) {
 // =====================
 function seekTo(t) {
   if (!song.player) return;
-  song.player.seekTo(Math.max(0, t - (current()?.offset ?? 0)), true);
+  song.player.seek(Math.max(0, t - (current()?.offset ?? 0)));
 }
 
 function togglePlay() {
   if (!song.player) return;
-  if (isPlaying()) song.player.pauseVideo();
-  else song.player.playVideo();
+  if (isPlaying()) song.player.pause();
+  else song.player.play();
 }
 
 function backOneBar() {
@@ -325,6 +407,7 @@ function renderAll() {
     : capo === 0 ? src.key.label : `${src.key.label} → ${keyLabel(src.key, capo)} shapes`;
   $('song-tempo').textContent = src?.tempo ? `${Math.round(src.tempo)} BPM` : '—';
   $('song-follow').disabled = !src;
+  $('song-practice').disabled = !src;
   renderTimeline();
   renderLoop();
   song.activeIdx = -2;
@@ -379,7 +462,7 @@ function renderNow(segments, idx, t) {
 function tick() {
   requestAnimationFrame(tick);
   const src = current();
-  if (!src || !song.clock) return;
+  if (!src || !song.player) return;
   let t = songTime();
 
   const { a, b } = song.loop;
@@ -391,7 +474,8 @@ function tick() {
   $('song-strip').style.transform = `translateX(${song.timelineWidth * PLAYHEAD_RATIO - t * PX_PER_SEC}px)`;
 
   const { segments } = src;
-  const idx = findSegmentIndex(segments, t);
+  // 練習モードは少し先のコードを光らせて、切り替わりに手が間に合うようにする
+  const idx = findSegmentIndex(segments, state.practice ? t + PRACTICE_LEAD_BEATS * beatSec() : t);
   let changed = false;
   if (idx !== song.activeIdx) {
     song.blockEls[song.activeIdx]?.classList.remove('active');
@@ -404,7 +488,7 @@ function tick() {
   // 次のコードが 1 拍以内に来るなら予告（再生中のみ）
   const next = segments[idx + 1];
   const until = next ? next.start - t : Infinity;
-  const showPreview = state.follow && isPlaying() && next?.root != null
+  const showPreview = state.follow && !state.practice && isPlaying() && next?.root != null
     && until > 0 && until <= beatSec() && next.label !== segments[idx]?.label;
   if (setPreview(showPreview ? next : null)) changed = true;
 
@@ -425,6 +509,7 @@ export function initSong({ onUpdate, onLEDs }) {
   $('song-url').onkeydown = (e) => { if (e.key === 'Enter') loadSong(); };
   $('song-source').onchange = (e) => selectSource(e.target.value);
   $('song-follow').onclick = () => setFollow(!state.follow);
+  $('song-practice').onclick = () => setPractice(!state.practice);
   $('song-play').onclick = togglePlay;
   $('song-back').onclick = backOneBar;
   $('song-loop-btn').onclick = cycleLoop;
@@ -441,15 +526,17 @@ export function initSong({ onUpdate, onLEDs }) {
     $('song-collapse').textContent = collapsed ? '▸' : '▾';
   };
   $('song-timeline').onclick = (e) => {
-    if (!song.clock || !current()) return;
+    if (!song.player || !current()) return;
     const rect = $('song-timeline').getBoundingClientRect();
     seekTo(songTime() + (e.clientX - rect.left - rect.width * PLAYHEAD_RATIO) / PX_PER_SEC);
   };
   new ResizeObserver(() => { song.timelineWidth = $('song-timeline').clientWidth; }).observe($('song-timeline'));
 
-  const initialId = new URLSearchParams(location.search).get('v');
-  if (initialId) {
-    $('song-url').value = `https://www.youtube.com/watch?v=${initialId}`;
+  // ?v=<YouTube の動画ID> / ?url=<ニコニコ・SoundCloud・ピアプロの URL> で自動読み込み
+  const params = new URLSearchParams(location.search);
+  const initial = params.get('url') ?? (params.get('v') && `https://www.youtube.com/watch?v=${params.get('v')}`);
+  if (initial) {
+    $('song-url').value = initial;
     loadSong();
   }
   requestAnimationFrame(tick);

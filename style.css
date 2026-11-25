@@ -605,6 +605,34 @@ body {
 .song-link { font-size: 0.6rem; color: var(--chord-color); text-decoration: none; letter-spacing: 0.1em; }
 .song-collapse { margin-left: auto; }
 
+.song-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.song-results[hidden] { display: none; }
+.song-results li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.song-results li:hover { background: var(--surface); }
+.song-result-kind { flex: none; width: 6.5em; font-size: 0.55rem; letter-spacing: 0.08em; color: var(--text-muted); }
+.song-result-kind.youtube { color: #ff5c5c; }
+.song-result-kind.niconico { color: #cccccc; }
+.song-result-kind.soundcloud { color: #ff8833; }
+.song-result-kind.piapro { color: #33ddff; }
+.song-result-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-result-meta { flex: none; color: var(--text-muted); font-size: 0.6rem; }
+
 .song-body { display: flex; flex-direction: column; gap: 10px; }
 .song-body[hidden] { display: none; }
 .song-main {
@@ -617,8 +645,10 @@ body {
   .song-main { grid-template-columns: minmax(0, 1fr); }
 }
 
-.song-player-wrap { position: relative; aspect-ratio: 16 / 9; background: #000; }
-.song-player-wrap > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+.song-player-wrap { background: #000; min-height: 60px; overflow: hidden; }
+#song-player { width: 100%; }
+#song-player iframe { display: block; max-width: 100%; border: 0; }
+#song-player .song-sc-player { width: 100%; height: 202px; }
 
 .song-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .song-k { font-size: 0.55rem; letter-spacing: 0.15em; color: var(--text-muted); }

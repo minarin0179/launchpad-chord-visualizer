@@ -1,4 +1,4 @@
-import { CHORD_TYPES, SCALES, NOTE_NAMES, INTERVAL_NAMES } from './constants.js';
+import { CHORD_TYPES, SCALES, NOTE_NAMES, INTERVAL_NAMES, ROW_INTERVAL, PRACTICE_ANCHOR } from './constants.js';
 import { state } from './state.js';
 
 // =====================
@@ -46,14 +46,37 @@ export function classifyPad(pc, rootPC, chordAll, scalePCs, bassPC, showChord, s
 // 現在の state からピッチクラス → 表示種別を返す関数を作る（DOM・LED 共通）
 // 次のコードの予告は、今のコードで光っていないパッドにだけ重ねる。
 // ledPhase=true のときは state.previewLit（点滅の消灯フェーズ）も反映する
+// 練習モードで光らせる音（MIDI ノート番号 → 'root' / 'chord' / 'bass' の Map。色は音名ではなく音の高さごとの役割で決める）
+// ルートは基準パッド（PRACTICE_ANCHOR、デフォルト配置なら C3）から 1 オクターブ以内に置き、そこから基本形（転回なし）で
+// 構成音を積む（9th などはオクターブを超えたまま）。分数コードのベースはルートより下。
+// 同じ音が出るパッドは全部光らせる（どこで押さえるかは弾く人が選べる）。カポ・オクターブで範囲も動く（形は固定）
+function practiceNotes() {
+  const ov = state.chordOverride;
+  const rootPC = getRootPC();
+  if (rootPC === null) return new Map();
+  const anchor = state.baseNote + PRACTICE_ANCHOR.row * ROW_INTERVAL + PRACTICE_ANCHOR.col;
+  const root = anchor + (((rootPC - anchor) % 12) + 12) % 12;
+  const intervals = ov?.intervals ?? CHORD_TYPES[state.chordType].intervals;
+  const notes = new Map(intervals.map(i => [root + i, i === 0 ? 'root' : 'chord']));
+  const bassPC = ov?.bassPC;
+  if (bassPC != null && bassPC !== rootPC) notes.set(root - ((((root - bassPC) % 12) + 12) % 12), 'bass');
+  return notes;
+}
+
+// classify(pc, pad?) — 練習モードは pad を渡したときだけ位置で絞り込む
 export function createPadClassifier({ ledPhase = false } = {}) {
   const chord = getChordPitchClasses();
   const scalePCs = getScalePitchClasses();
   const rootPC = getRootPC();
   const p = state.preview;
-  const showPreview = p && state.showChord && (!ledPhase || state.previewLit);
-  return (pc) => {
-    const cls = classifyPad(pc, rootPC, chord.all, scalePCs, chord.bassPC, state.showChord, state.showScale);
+  // 練習モードは弾くコードだけ（コードトーンは常に表示、スケールは消灯）
+  const showChord = state.showChord || state.practice;
+  const showScale = state.showScale && !state.practice;
+  const showPreview = p && showChord && (!ledPhase || state.previewLit);
+  const practice = state.practice ? practiceNotes() : null;
+  return (pc, pad) => {
+    if (practice && pad) return practice.get(pad.semitone) ?? 'off';
+    const cls = classifyPad(pc, rootPC, chord.all, scalePCs, chord.bassPC, showChord, showScale);
     if (!showPreview || cls === 'root' || cls === 'bass' || cls === 'chord') return cls;
     if (pc === p.rootPC) return 'next-root';
     if (p.pcs.includes(pc)) return 'next-chord';

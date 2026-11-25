@@ -57,15 +57,52 @@ export function parseSongleChord(name) {
   };
 }
 
-function songleUrl(videoId) {
-  return `www.youtube.com/watch?v=${videoId}`;
+const API_V2_SONG = 'https://api.songle.jp/api/v2/song.json';
+
+// YouTube の動画ID（11 文字）はそのまま渡せるように URL 化する
+function songleUrl(source) {
+  return /^[\w-]{11}$/.test(source) ? `www.youtube.com/watch?v=${source}` : source;
 }
 
-async function getJSON(path, videoId) {
-  const res = await fetch(`${API_BASE}/${path}?url=${encodeURIComponent(songleUrl(videoId))}`);
+async function getJSON(path, url) {
+  const res = await fetch(`${API_BASE}/${path}?url=${encodeURIComponent(url)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Songle API ${res.status}`);
   return res.json();
+}
+
+// v2 の曲情報（CORS 可）。ピアプロの版なし URL（piapro.jp/t/XXXX）も最新版に解決してくれる。
+// 未登録は null。{ title, artist, duration, permalink, code, url（Songle の曲ページ） }
+export async function fetchSongleSong(source) {
+  const res = await fetch(`${API_V2_SONG}?syntax=camelcase&url=${encodeURIComponent(songleUrl(source))}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Songle API ${res.status}`);
+  const data = (await res.json())?.data;
+  if (!data) return null;
+  const a = data.attributes;
+  return {
+    title: a.name,
+    artist: { name: data.relationships?.artist?.data?.attributes?.name ?? '' },
+    duration: a.durationTimeMs,
+    permalink: a.permalink,
+    code: a.code,
+    url: data.relationships?.uri?.data?.attributes?.permalink,
+  };
+}
+
+// キーワード検索（曲名・アーティスト名）。[{ title, artist, permalink, duration }]
+// API は最大 40 件を返し、該当なしは 404
+export async function searchSongle(query) {
+  const res = await fetch(`${API_BASE}/songs/search.json?q=${encodeURIComponent(query)}`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Songle API ${res.status}`);
+  const list = await res.json();
+  return (Array.isArray(list) ? list : []).map(s => ({
+    title: s.title,
+    artist: s.artist?.name ?? '',
+    permalink: s.permalink,
+    duration: s.duration / 1000,
+  }));
 }
 
 // コード区間の構成音を時間で重み付けしたピッチクラス分布からキーを推定
@@ -81,13 +118,15 @@ function estimateKeyFromSegments(segments) {
   return keyFromProfile(profile);
 }
 
-// 未登録の動画なら null。登録済みなら
+// source は YouTube の動画ID、または Songle が扱う URL（YouTube / ニコニコ / SoundCloud / ピアプロ）
+// 未登録なら null。登録済みなら
 // { song, pageUrl, key, tempo, segments, timing: { duration, bounds } }
-export async function fetchSongle(videoId) {
-  const [song, chordData, beatData] = await Promise.all([
-    getJSON('song.json', videoId),
-    getJSON('song/chord.json', videoId),
-    getJSON('song/beat.json', videoId).catch(() => null),
+export async function fetchSongle(source) {
+  const song = await fetchSongleSong(source);
+  if (!song) return null;
+  const [chordData, beatData] = await Promise.all([
+    getJSON('song/chord.json', song.permalink),
+    getJSON('song/beat.json', song.permalink).catch(() => null),
   ]);
   const chords = chordData?.chords;
   if (!chords?.length) return null;
@@ -106,12 +145,12 @@ export async function fetchSongle(videoId) {
   }
 
   const beats = beatData?.beats ?? [];
-  const duration = Math.max(song?.duration ? song.duration / 1000 : 0, merged[merged.length - 1].end);
+  const duration = Math.max(song.duration ? song.duration / 1000 : 0, merged[merged.length - 1].end);
   const bpms = beats.map(b => b.bpm).filter(Boolean).sort((a, b) => a - b);
 
   return {
     song,
-    pageUrl: song?.url ?? `https://songle.jp/songs/${encodeURIComponent(songleUrl(videoId))}`,
+    pageUrl: song.url ?? `https://songle.jp/songs/${encodeURIComponent(song.permalink.replace(/^https?:\/\//, ''))}`,
     key: estimateKeyFromSegments(merged),
     tempo: bpms.length ? bpms[bpms.length >> 1] : 0,
     segments: merged,
