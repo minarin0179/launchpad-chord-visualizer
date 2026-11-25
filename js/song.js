@@ -44,6 +44,8 @@ const song = {
   loop: { a: null, b: null },
   blockEls: [],
   timelineWidth: 0,
+  overviewDrag: null,   // シークバーをドラッグ中の時刻（秒、離したときにシーク）
+  timeText: '',
 };
 
 let _onUpdate = () => {};  // main.js の updateAll（{ quiet } を受け取る）
@@ -403,7 +405,7 @@ function refreshLEDs() {
     el.classList.toggle('song-lit', !!lit);
     el.style.setProperty('--song-btn', lit ? `rgb(${c.map(v => v * 2).join(',')})` : '');
   });
-  $('song-play').textContent = isPlaying() ? '❚❚' : '▶';
+  $('song-play').textContent = $('song-ov-play').textContent = isPlaying() ? '❚❚' : '▶';
   _onLEDs();
 }
 
@@ -444,30 +446,49 @@ function renderTimeline() {
   blocks.replaceChildren();
   song.blockEls = [];
   $('song-strip').style.width = src ? `${src.timing.duration * PX_PER_SEC}px` : '0';
+  const overview = $('song-overview-blocks');
+  overview.replaceChildren();
   if (!src) return;
+  const pct = (sec) => `${(sec / src.timing.duration) * 100}%`;
   const capo = capoPos();
   for (const seg of src.segments) {
     const el = document.createElement('div');
     el.className = 'song-block' + (seg.root === null ? ' nc' : '');
     el.style.left = `${seg.start * PX_PER_SEC}px`;
     el.style.width = `${(seg.end - seg.start) * PX_PER_SEC}px`;
-    el.style.setProperty('--hue', String(mod12((seg.root ?? 0) - capo) * 30));
+    const hue = String(mod12((seg.root ?? 0) - capo) * 30);
+    el.style.setProperty('--hue', hue);
     el.textContent = chordLabel(seg, capo);
     blocks.appendChild(el);
     song.blockEls.push(el);
+
+    const ov = document.createElement('div');
+    ov.className = 'song-ov-block' + (seg.root === null ? ' nc' : '');
+    ov.style.left = pct(seg.start);
+    ov.style.width = pct(seg.end - seg.start);
+    ov.style.setProperty('--hue', hue);
+    ov.title = `${chordLabel(seg, capo)}  ${formatSec(seg.start)}`;
+    overview.appendChild(ov);
   }
 }
 
 function renderLoop() {
   const el = $('song-loop');
+  const ov = $('song-overview-loop');
   const { a, b } = song.loop;
   $('song-loop-btn').classList.toggle('active', a !== null);
   $('song-loop-btn').textContent = b !== null ? 'A-B ✕' : a !== null ? 'A-B: set B' : 'A-B';
   el.hidden = a === null;
+  ov.hidden = a === null || !current();
   if (a === null) return;
   el.style.left = `${a * PX_PER_SEC}px`;
   el.style.width = b === null ? '2px' : `${(b - a) * PX_PER_SEC}px`;
   el.classList.toggle('open', b === null);
+  if (!current()) return;
+  const dur = current().timing.duration;
+  ov.style.left = `${(a / dur) * 100}%`;
+  ov.style.width = b === null ? '2px' : `${((b - a) / dur) * 100}%`;
+  ov.classList.toggle('open', b === null);
 }
 
 function renderNow(segments, idx, t) {
@@ -478,6 +499,44 @@ function renderNow(segments, idx, t) {
   const next = segments.slice(idx + 1).find(s => s.root !== null);
   $('song-next').textContent = next ? chordLabel(next, capo) : '—';
   $('song-next-in').textContent = next ? `in ${Math.max(0, next.start - t).toFixed(1)}s` : '';
+}
+
+// 曲全体のシークバー: 再生位置と時刻表示
+function renderOverviewHead(src, t) {
+  const dur = src.timing.duration;
+  const clamped = Math.min(Math.max(t, 0), dur);
+  $('song-overview-head').style.left = `${(clamped / dur) * 100}%`;
+  const text = `${formatSec(clamped)} / ${formatSec(dur)}`;
+  if (text !== song.timeText) {
+    song.timeText = text;
+    $('song-time').textContent = text;
+  }
+}
+
+// クリック / ドラッグでシーク（ドラッグ中は位置だけ動かし、離したときにシーク）
+function initOverviewSeek() {
+  const bar = $('song-overview');
+  const timeAt = (e) => {
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    return ratio * current().timing.duration;
+  };
+  bar.onpointerdown = (e) => {
+    if (!song.player || !current()) return;
+    bar.setPointerCapture(e.pointerId);
+    song.overviewDrag = timeAt(e);
+  };
+  bar.onpointermove = (e) => {
+    if (song.overviewDrag !== null) song.overviewDrag = timeAt(e);
+  };
+  const finish = (e, commit) => {
+    if (song.overviewDrag === null) return;
+    const t = commit ? timeAt(e) : null;
+    song.overviewDrag = null;
+    if (t !== null) seekTo(t);
+  };
+  bar.onpointerup = (e) => finish(e, true);
+  bar.onpointercancel = (e) => finish(e, false);
 }
 
 // =====================
@@ -496,6 +555,7 @@ function tick() {
   }
 
   $('song-strip').style.transform = `translateX(${song.timelineWidth * PLAYHEAD_RATIO - t * PX_PER_SEC}px)`;
+  renderOverviewHead(src, song.overviewDrag ?? t);
 
   const { segments } = src;
   // 練習モードは少し先のコードを光らせて、切り替わりに手が間に合うようにする
@@ -530,12 +590,14 @@ export function initSong({ onUpdate, onLEDs }) {
   setTopRowColorProvider(topRowColor);
 
   initSongVolume();
+  initOverviewSeek();
   $('song-load').onclick = loadSong;
   $('song-url').onkeydown = (e) => { if (e.key === 'Enter') loadSong(); };
   $('song-source').onchange = (e) => selectSource(e.target.value);
   $('song-follow').onclick = () => setFollow(!state.follow);
   $('song-practice').onclick = () => setPractice(!state.practice);
   $('song-play').onclick = togglePlay;
+  $('song-ov-play').onclick = togglePlay;
   $('song-back').onclick = backOneBar;
   $('song-loop-btn').onclick = cycleLoop;
   $('song-capo-down').onclick = () => shiftCapo(-1);

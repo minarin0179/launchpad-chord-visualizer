@@ -720,6 +720,44 @@ body {
   pointer-events: none;
 }
 
+/* 曲全体のシークバー */
+.song-overview-row { display: flex; align-items: center; gap: 10px; }
+.song-overview {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  touch-action: none;
+}
+#song-overview-blocks { position: absolute; inset: 0; overflow: hidden; }
+.song-ov-block { position: absolute; top: 0; bottom: 0; background: hsl(var(--hue) 55% 30%); }
+.song-ov-block.nc { background: #16161f; }
+.song-overview-loop {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  background: rgba(220, 0, 220, 0.25);
+  border-left: 2px solid #dd33dd;
+  border-right: 2px solid #dd33dd;
+  pointer-events: none;
+}
+.song-overview-loop.open { background: none; border-right: none; }
+.song-overview-head {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--root-color);
+  box-shadow: 0 0 4px var(--root-color);
+  pointer-events: none;
+}
+.song-ov-play { flex: none; min-width: 2.6em; }
+.song-time { flex: none; font-size: 0.65rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
 /* Song buttons on the top row (CC 95-98) */
 .pad.fn-btn.song-lit { background: var(--song-btn); box-shadow: 0 0 6px var(--song-btn); }
 
