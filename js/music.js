@@ -4,17 +4,31 @@ import { state } from './state.js';
 // =====================
 // Music Logic
 // =====================
+// FOLLOW 中は state.chordOverride で CHORD_TYPES に無い構成音・分数コードのベース・N.C. を表す
 export function getChordPitchClasses() {
-  const intervals = CHORD_TYPES[state.chordType].intervals.map(i => i % 12);
+  const ov = state.chordOverride;
+  if (ov?.none) return { all: [], inverted: [], bassPC: null };
+  const intervals = (ov?.intervals ?? CHORD_TYPES[state.chordType].intervals).map(i => i % 12);
   const raw = intervals.map(i => (state.root + i) % 12);
   const inv = state.showInversion ? state.inversion : 0;
   const inverted = [...raw.slice(inv), ...raw.slice(0, inv)];
-  const bassPC = inv > 0 ? inverted[0] : null;
+  let bassPC = inv > 0 ? inverted[0] : null;
+  if (ov?.bassPC != null && ov.bassPC !== state.root) bassPC = ov.bassPC;
   return { all: raw, inverted, bassPC };
 }
 
+// 点灯させるルート音（N.C. の間は null）
+export function getRootPC() {
+  return state.chordOverride?.none ? null : state.root;
+}
+
+export function getScaleRootPC() {
+  return state.scaleRoot ?? state.root;
+}
+
 export function getScalePitchClasses() {
-  return SCALES[state.scale].intervals.map(i => (state.root + i) % 12);
+  const root = getScaleRootPC();
+  return SCALES[state.scale].intervals.map(i => (root + i) % 12);
 }
 
 // =====================
@@ -29,23 +43,44 @@ export function classifyPad(pc, rootPC, chordAll, scalePCs, bassPC, showChord, s
   return 'off';
 }
 
+// 現在の state からピッチクラス → 表示種別を返す関数を作る（DOM・LED 共通）
+// 次のコードの予告は、今のコードで光っていないパッドにだけ重ねる。
+// ledPhase=true のときは state.previewLit（点滅の消灯フェーズ）も反映する
+export function createPadClassifier({ ledPhase = false } = {}) {
+  const chord = getChordPitchClasses();
+  const scalePCs = getScalePitchClasses();
+  const rootPC = getRootPC();
+  const p = state.preview;
+  const showPreview = p && state.showChord && (!ledPhase || state.previewLit);
+  return (pc) => {
+    const cls = classifyPad(pc, rootPC, chord.all, scalePCs, chord.bassPC, state.showChord, state.showScale);
+    if (!showPreview || cls === 'root' || cls === 'bass' || cls === 'chord') return cls;
+    if (pc === p.rootPC) return 'next-root';
+    if (p.pcs.includes(pc)) return 'next-chord';
+    return cls;
+  };
+}
+
 // =====================
 // Chord Display Data (DOM更新は呼び出し元が行う)
 // =====================
 export function getChordDisplayData() {
-  const chordPCs = getChordPitchClasses();
-  const sym = CHORD_TYPES[state.chordType].symbol;
-  const rootName = NOTE_NAMES[state.root];
-  const bassName = chordPCs.bassPC !== null ? '/' + NOTE_NAMES[chordPCs.bassPC] : '';
-  const noteNames = chordPCs.inverted.map(pc => NOTE_NAMES[pc]).join('  ');
-  const ints = CHORD_TYPES[state.chordType].intervals;
-  const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`).join(' — ');
+  const ov = state.chordOverride;
   const baseNoteName = NOTE_NAMES[state.baseNote % 12];
   const baseOctave = Math.floor(state.baseNote / 12) - 1;
   const baseInfo = `[Base: ${baseNoteName}${baseOctave}]`;
   const scaleKeyLabel = state.showScale
-    ? `${rootName} ${SCALES[state.scale].label} Scale  ${baseInfo}`
+    ? `${NOTE_NAMES[getScaleRootPC()]} ${SCALES[state.scale].label} Scale  ${baseInfo}`
     : baseInfo;
+  if (ov?.none) return { chordName: 'N.C.', noteNames: '', intNames: '', scaleKeyLabel };
+
+  const chordPCs = getChordPitchClasses();
+  const sym = ov?.symbol ?? CHORD_TYPES[state.chordType].symbol;
+  const rootName = NOTE_NAMES[state.root];
+  const bassName = chordPCs.bassPC !== null ? '/' + NOTE_NAMES[chordPCs.bassPC] : '';
+  const noteNames = chordPCs.inverted.map(pc => NOTE_NAMES[pc]).join('  ');
+  const ints = ov?.intervals ?? CHORD_TYPES[state.chordType].intervals;
+  const intNames = ints.map(i => INTERVAL_NAMES[i] || `+${i}`).join(' — ');
   return { chordName: rootName + sym + bassName, noteNames, intNames, scaleKeyLabel };
 }
 

@@ -7,12 +7,12 @@ import { log } from './logger.js';
 import { startNote, stopNote, getActiveNotes, playMetronomeClick,
          selectInstrument, getAudioCtx } from './audio.js';
 import { setSamplerStatusCallback, getSampleDestination } from './sampler.js';
-import { getChordPitchClasses, getScalePitchClasses, classifyPad,
-         detectChordFromActiveNotes, getChordDisplayData } from './music.js';
+import { createPadClassifier, detectChordFromActiveNotes, getChordDisplayData } from './music.js';
 import { sendToLaunchpad, flashPressedPad, updateLogoLED, sendLogoLED, clearAllLEDs } from './led.js';
 import { buildGridDOM, handleTopRowPress, handleRightColPress,
          shiftCapo, padEls } from './grid.js';
 import { initMIDI, onDeviceSelect, rescanMIDI, rebuildPadMap } from './midi.js';
+import { initSong, pauseFollow } from './song.js';
 
 // メトロノーム内部状態（公開 state に含めない）
 let _metroTimer = null;
@@ -46,7 +46,7 @@ function buildInversionButtons() {
     const btn = document.createElement('button');
     btn.className = 'btn' + (i === state.inversion ? ' active' : '');
     btn.textContent = INVERSION_LABELS[i] || `${i}th`;
-    btn.onclick = () => { state.inversion = i; updateAll(); };
+    btn.onclick = () => { pauseFollow(); state.inversion = i; updateAll(); };
     row.appendChild(btn);
   }
 }
@@ -54,34 +54,38 @@ function buildInversionButtons() {
 // =====================
 // Main Update (central hub)
 // =====================
-function updateAll() {
+// quiet: LED 送信のログを出さない（Song の FOLLOW による頻繁な更新用）
+function updateAll({ quiet = false } = {}) {
   const maxInv = CHORD_TYPES[state.chordType].intervals.length - 1;
   if (state.inversion > maxInv) state.inversion = 0;
 
-  const chordPCs = getChordPitchClasses();
-  const scalePCs = getScalePitchClasses();
-  const rootPC   = state.root;
-
   // 視覚状態のキーを生成し、変化がなければ DOM 更新をスキップ
   // （SENDボタン用に LED 送信は常時実行）
-  const key = `${rootPC}|${state.chordType}|${state.inversion}|${state.showChord}|${state.showScale}|${state.showInversion}|${state.scale}|${state.baseNote}`;
+  const key = [state.root, state.chordType, state.inversion, state.showChord, state.showScale,
+    state.showInversion, state.scale, state.baseNote, state.scaleRoot,
+    JSON.stringify(state.chordOverride), JSON.stringify(state.preview)].join('|');
   if (key !== _prevUpdateKey) {
     _prevUpdateKey = key;
 
     // Inversion ボタン再構築
     buildInversionButtons();
 
-    // パッドDOMクラス更新（classifyPad で統一）
+    // パッドDOMクラス更新（createPadClassifier で LED と統一。予告の点滅は CSS アニメーション）
+    const classify = createPadClassifier();
     pads.forEach((pad, idx) => {
       const el = padEls[idx];
       if (!el) return;
-      const cls = classifyPad(pad.pitchClass, rootPC, chordPCs.all, scalePCs, chordPCs.bassPC, state.showChord, state.showScale);
-      el.className = `pad ${cls}`;
+      el.className = `pad ${classify(pad.pitchClass)}`;
     });
 
-    // ルートボタン active 状態（grid.js の shiftCapo からの DOM 操作を移管）
+    // Root / Chord / Scale ボタンの active 状態（Song の FOLLOW でも変わるので毎回同期）
+    const noChord = !!state.chordOverride?.none;
     document.getElementById('root-buttons').querySelectorAll('.btn')
-      .forEach((b, i) => b.classList.toggle('active', i === rootPC));
+      .forEach((b, i) => b.classList.toggle('active', !noChord && i === state.root));
+    document.getElementById('chord-buttons').querySelectorAll('.btn')
+      .forEach(b => b.classList.toggle('active', !noChord && b.dataset.key === state.chordType));
+    document.getElementById('scale-buttons').querySelectorAll('.btn')
+      .forEach(b => b.classList.toggle('active', b.dataset.key === state.scale));
 
     // コード表示テキスト（music.js の updateChordDisplay からの DOM 操作を移管）
     const d = getChordDisplayData();
@@ -91,7 +95,7 @@ function updateAll() {
     document.getElementById('scale-key-label').textContent = d.scaleKeyLabel;
   }
 
-  sendToLaunchpad(chordPCs.all, scalePCs, rootPC, chordPCs.bassPC);
+  sendToLaunchpad({ quiet });
 }
 
 // =====================
@@ -159,14 +163,14 @@ buildButtonGroup(
   'root-buttons',
   NOTE_NAMES.map((name, i) => ({ key: i, label: name })),
   0,
-  (i) => { state.root = i; state.inversion = 0; updateAll(); }
+  (i) => { pauseFollow(); state.root = i; state.inversion = 0; updateAll(); }
 );
 
 buildButtonGroup(
   'chord-buttons',
   Object.entries(CHORD_TYPES).map(([key, val]) => ({ key, label: val.label })),
   'maj',
-  (key) => { state.chordType = key; state.inversion = 0; updateAll(); }
+  (key) => { pauseFollow(); state.chordType = key; state.inversion = 0; updateAll(); }
 );
 
 buildButtonGroup(
@@ -302,6 +306,11 @@ initMIDI({
   onFlash:         flashPressedPad,
   onTopRow:        handleTopRowPress,
   onRightCol:      handleRightColPress,
+});
+
+initSong({
+  onUpdate: updateAll,
+  onLEDs:   () => sendToLaunchpad({ quiet: true }),
 });
 
 log('App started');

@@ -572,3 +572,126 @@ body {
 .detected-chord-name  { color: var(--text-muted); }
 .detected-chord-name.exact { color: var(--chord-color); }
 .detected-chord-sep   { color: var(--border); }
+
+/* ================================================================
+   Song bar (js/song.js)
+   ================================================================ */
+.song-bar {
+  width: 100%;
+  max-width: 1160px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.song-bar.collapsed .song-body { display: none; }
+
+.song-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.song-title { border: none; padding: 0; margin-right: 4px; }
+#song-url, #song-source {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 0.68rem;
+}
+#song-url { flex: 1; min-width: 12em; }
+#song-source { max-width: 22em; }
+#song-source:disabled { opacity: 0.7; }
+.song-link { font-size: 0.6rem; color: var(--chord-color); text-decoration: none; letter-spacing: 0.1em; }
+.song-collapse { margin-left: auto; }
+
+.song-body { display: flex; flex-direction: column; gap: 10px; }
+.song-body[hidden] { display: none; }
+.song-main {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .song-main { grid-template-columns: minmax(0, 1fr); }
+}
+
+.song-player-wrap { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.song-player-wrap > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.song-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.song-k { font-size: 0.55rem; letter-spacing: 0.15em; color: var(--text-muted); }
+.song-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.75rem; }
+.song-now-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end; }
+#song-now {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 700;
+  color: var(--chord-color);
+  line-height: 1.1;
+  min-width: 3ch;
+}
+#song-now-real { font-size: 0.6rem; color: var(--text-muted); min-height: 1em; }
+.song-next-box { display: flex; gap: 8px; align-items: baseline; padding-bottom: 1.4em; }
+#song-next { font-size: 1.2rem; font-weight: 700; }
+#song-next-in { font-size: 0.65rem; color: var(--text-muted); }
+.song-capo { min-width: 2ch; text-align: center; font-weight: 700; }
+
+.song-status { font-size: 0.65rem; color: var(--text-muted); font-family: 'Noto Sans JP', sans-serif; min-height: 1.2em; }
+.song-status.busy  { color: var(--chord-color); }
+.song-status.ok    { color: var(--scale-color); }
+.song-status.error { color: var(--root-color); }
+
+.song-timeline {
+  position: relative;
+  height: 46px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.song-strip { position: absolute; inset: 0 auto 0 0; will-change: transform; }
+.song-block {
+  position: absolute;
+  top: 4px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  border-left: 1px solid var(--bg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  background: hsl(var(--hue) 55% 20%);
+  color: hsl(var(--hue) 90% 80%);
+}
+.song-block.nc { background: #16161f; color: var(--text-muted); }
+.song-block.active { outline: 2px solid #fff; outline-offset: -2px; }
+.song-loop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(220, 0, 220, 0.18);
+  border-left: 2px solid #dd33dd;
+  border-right: 2px solid #dd33dd;
+  pointer-events: none;
+}
+.song-loop.open { background: none; border-right: none; }
+.song-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 25%;
+  width: 2px;
+  background: var(--root-color);
+  pointer-events: none;
+}
+
+/* Song buttons on the top row (CC 95-98) */
+.pad.fn-btn.song-lit { background: var(--song-btn); box-shadow: 0 0 6px var(--song-btn); }
+
+/* Next-chord preview (blinks on screen; Launchpad blinks via js/song.js) */
+@keyframes pad-preview { 50% { opacity: 0.25; } }
+.pad.next-root  { background: #7a1a30; animation: pad-preview 0.3s steps(1) infinite; }
+.pad.next-chord { background: #155a6a; animation: pad-preview 0.3s steps(1) infinite; }

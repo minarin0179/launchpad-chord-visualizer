@@ -95,9 +95,15 @@ export function shiftOctave(delta) {
   log(`Octave → ${noteName}${octave} (base=${state.baseNote})`, 'out');
 }
 
+// カポ変更の通知先（Song バーが AUTO 解除・コードの再適用に使う）
+let _capoListener = null;
+export function setCapoListener(fn) {
+  _capoListener = fn;
+}
+
 export function shiftCapo(delta) {
   const newBase = state.baseNote + delta;
-  if (newBase < 0 || newBase > MAX_BASE_NOTE_CAPO) return;
+  if (delta === 0 || newBase < 0 || newBase > MAX_BASE_NOTE_CAPO) return false;
   state.baseNote = newBase;
   state.root = ((state.root + delta) % 12 + 12) % 12;
   state.capo += delta;
@@ -106,6 +112,8 @@ export function shiftCapo(delta) {
   rebuildPads();
   updateCapoDisplay();
   log(`Capo ${state.capo >= 0 ? '+' : ''}${state.capo} → ${NOTE_NAMES[state.root]} (base=${state.baseNote})`, 'out');
+  _capoListener?.(delta);
+  return true;
 }
 
 export function updateCapoDisplay() {
@@ -143,6 +151,12 @@ export function rebuildPads() {
 // =====================
 // Top row / Right column handlers
 // =====================
+// CC 95-98 の処理先（Song バーが登録）
+let _extraTopRowHandler = null;
+export function setExtraTopRowHandler(fn) {
+  _extraTopRowHandler = fn;
+}
+
 export function handleTopRowPress(index) {
   switch (TOP_ROW_CCS[index]) {
     case CC_UP:    shiftOctave(+1); break;
@@ -150,7 +164,8 @@ export function handleTopRowPress(index) {
     case CC_LEFT:  shiftCapo(-1);   break;
     case CC_RIGHT: shiftCapo(+1);   break;
     default:
-      log(`Top row CC${TOP_ROW_CCS[index]} pressed`, 'in');
+      if (_extraTopRowHandler) _extraTopRowHandler(TOP_ROW_CCS[index]);
+      else log(`Top row CC${TOP_ROW_CCS[index]} pressed`, 'in');
   }
 }
 

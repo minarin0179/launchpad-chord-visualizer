@@ -1,6 +1,6 @@
 import { COLORS, LOGO_GREEN, FN_BTN_COLOR, FN_BTN_OFF_COLOR } from './constants.js';
 import { state, pads } from './state.js';
-import { getChordPitchClasses, getScalePitchClasses, classifyPad } from './music.js';
+import { createPadClassifier } from './music.js';
 import { log } from './logger.js';
 import { TOP_ROW_CCS, LOGO_PAD } from '../packages/launchpad-x/dist/index.js';
 
@@ -23,10 +23,13 @@ export function updateLogoLED() {
 // Pad LED Color
 // =====================
 export function getPadLEDColor(pitchClass) {
-  const chordPCs = getChordPitchClasses();
-  const scalePCs = getScalePitchClasses();
-  const cls = classifyPad(pitchClass, state.root, chordPCs.all, scalePCs, chordPCs.bassPC, state.showChord, state.showScale);
-  return COLORS[cls];
+  return COLORS[createPadClassifier({ ledPhase: true })(pitchClass)];
+}
+
+// 上段 CC 95-98 の色は Song 側が決める（index 4〜7 → RGB、null なら消灯色）
+let _topRowColorProvider = () => null;
+export function setTopRowColorProvider(fn) {
+  _topRowColorProvider = fn;
 }
 
 // 同じ semitone のパッドを全て白フラッシュ → 元の色に戻す
@@ -46,27 +49,28 @@ export function flashPressedPad(pad, isPressed) {
   }
 }
 
-// 全パッド + 上段ボタンの LED を一括送信
-export function sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC) {
+// 全パッド + 上段ボタンの LED を現在の state から一括送信
+// quiet: ログを出さない（曲の再生に合わせた頻繁な更新用）
+export function sendToLaunchpad({ quiet = false } = {}) {
   if (!state.device) return;
 
   const updates = [];
+  const classify = createPadClassifier({ ledPhase: true });
 
   pads.forEach(pad => {
-    const cls = classifyPad(pad.pitchClass, rootPC, chordPCs, scalePCs, bassPC, state.showChord, state.showScale);
-    const [r, g, b] = COLORS[cls];
+    const [r, g, b] = COLORS[classify(pad.pitchClass)];
     updates.push({ type: 'rgb', pad: pad.launchpadNote, r, g, b });
   });
 
-  // 上段ボタン: OCT▲/▼・◄/► はオレンジ、残りはほぼ消灯
+  // 上段ボタン: OCT▲/▼・◄/► はオレンジ、CC 95-98 は Song の状態色
   TOP_ROW_CCS.forEach((cc, i) => {
-    const [r, g, b] = i < 4 ? FN_BTN_COLOR : FN_BTN_OFF_COLOR;
+    const [r, g, b] = i < 4 ? FN_BTN_COLOR : (_topRowColorProvider(i) ?? FN_BTN_OFF_COLOR);
     updates.push({ type: 'rgb', pad: cc, r, g, b });
   });
 
   try {
     state.device.sendLEDs(updates);
-    log(`SysEx → RGB lighting (${pads.length + 8} LEDs)`, 'out');
+    if (!quiet) log(`SysEx → RGB lighting (${pads.length + 8} LEDs)`, 'out');
   } catch(e) {
     log('MIDI send error: ' + e.message, 'err');
   }

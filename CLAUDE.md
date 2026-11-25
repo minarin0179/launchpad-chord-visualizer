@@ -57,7 +57,12 @@ F0 00 20 29 02 0C 03 [03 <pad> <r> <g> <b>]... F7
 | 92  | Octave Down (-12) — `shiftOctave(-1)` |
 | 93  | Capo Down (-1) — `shiftCapo(-1)`（baseNoteとrootを同時に-1、視覚パターン固定で移調） |
 | 94  | Capo Up (+1) — `shiftCapo(+1)`（baseNoteとrootを同時に+1、視覚パターン固定で移調） |
-| 95-98 | 未割当（将来用） |
+| 95  | Song: 再生 / 一時停止 |
+| 96  | Song: 1小節戻る（4拍分、テンポ不明時は 2 秒） |
+| 97  | Song: FOLLOW ON/OFF |
+| 98  | Song: A-B ループ（A 設定 → B 設定 → 解除） |
+
+CC 95-98 は `grid.js` の `setExtraTopRowHandler` 経由で `song.js` が処理し、LED 色は `led.js` の `setTopRowColorProvider` 経由で `song.js` が決める（`SONG_BTN_COLORS`）。
 
 ---
 
@@ -79,14 +84,61 @@ const state = {
   midiAccess: null,    // MIDIAccessオブジェクト
   bpm: 120,            // メトロノームBPM（40〜240）
   metronome: false,    // メトロノームON/OFF
+  // --- Song バー連動（js/song.js が更新）---
+  follow: false,       // FOLLOW 中は再生位置のコードで root / chordType を自動更新
+  chordOverride: null, // { intervals?, symbol?, bassPC?, none? } — CHORD_TYPES に無い構成音・分数コードのベース・N.C.
+  scaleRoot: null,     // スケール基準音（null = コードのルート、FOLLOW 中は曲のキー）
+  preview: null,       // 次のコード予告 { rootPC, pcs[] }
+  previewLit: true,    // 予告の LED 点滅フェーズ
 };
 ```
+
+### Song バー仕様
+
+#### コード進行のソース
+| ソース | 取得元 | 備考 |
+|--------|--------|------|
+| Songle | `https://widget.songle.jp/api/v1/song.json` / `song/chord.json` / `song/beat.json`（`?url=www.youtube.com/watch?v=<id>`） | CORS 許可。時刻は動画基準の ms。未登録は 404 → `null`。キーは返らないのでコード構成音から推定 |
+| 解析結果 | localStorage `chord-analyzer:v2:<videoId>`（analyze.html が保存） | 既定オプションで `decodeChords`。保存済みの Offset を適用 |
+
+- 選択の優先順: 解析結果が「Songle ではなく解析結果を表示中」で保存されていれば解析結果、それ以外は Songle → 解析結果。両方あればセレクトで切替
+- Songle のコード名の変換: `M7`→`maj7`、`m7b5`/`m7-5`→`m7b5`、`sus`→`sus4`、`+`→`aug` など。`CHORD_TYPES` に無い型（`mM7` / `7sus4` / `aug7` / `7b5` ほか）は Songle の表記をそのまま表示に使い、構成音は既知のものだけ定義（未知は先頭 `m` ならマイナー三和音、それ以外はメジャー三和音）。同じコードが続く区間は 1 つにまとめる
+
+#### FOLLOW
+- ソースを読み込むと自動で ON。再生位置のセグメントを `state.root` / `chordType` / `chordOverride` に適用（一時停止中のシークでも追従）
+- N.C.（`N`）とコードの無い区間は `chordOverride = { none: true }` → ルート・コードトーンは消灯し、スケールだけ表示
+- スケールは曲のキー基準（`scaleRoot = key.root`、`scale` は major / minor）。FOLLOW OFF で `scaleRoot = null`（コードのルート基準に戻る）
+- 次コードの予告: FOLLOW 中・再生中のみ、次のセグメントがコードあり かつ 今と別のコードで、開始まで 1 拍（`60 / tempo`、不明時 0.5 秒）以内のとき。今のコードで root / chord / bass として光っていないパッドにだけ重ねる
+
+#### Transport
+- 1小節戻る: 現在位置から 4 拍分（`4 × 60 / tempo`）戻る
+- A-B ループ: 1 回目で A、2 回目で B（A から 1 拍以上後のときのみ。そうでなければ解除）、3 回目で解除。再生中に B を越えたら A へシーク
+- タイムラインのクリックでシーク（プレイヘッドは左から 25% の位置）
+
+#### 上段 Song ボタンの LED（曲未読込時は `FN_BTN_OFF_COLOR`）
+| CC | 状態 | RGB |
+|----|------|-----|
+| 95 | 再生中 / 停止中 | [0, 100, 0] / [20, 60, 0] |
+| 96 | 常時 | [60, 30, 0] |
+| 97 | FOLLOW ON / OFF | [0, 100, 127] / [12, 12, 12] |
+| 98 | ループ中 / A のみ設定 / なし | [110, 0, 110] / [100, 100, 0] / [12, 12, 12] |
+
+画面の上段ボタンも同じ色で点灯する（`.pad.fn-btn.song-lit` + `--song-btn`）。
+
+### Song（曲バー）連動の要点
+- **カポは `state.capo` に一本化**。曲のカポ（表示 = 実音 − capo）を `shiftCapo` でメインのカポに反映するので、Launchpad はカポ後の形で光り、音は実音。AUTO は `suggestCapo`、手動変更（画面 / CC93・94）で AUTO 解除（`setCapoListener`）
+- `shiftCapo` は `state.root` もずらすため、FOLLOW 中はカポ変更後に現在のコードを再適用する
+- Root / Chord / Inversion の手動操作は `pauseFollow()` で FOLLOW を一時停止（`chordOverride` / `scaleRoot` / `preview` をクリア）
+- 次のコードの予告は切替の 1 拍前（`60 / tempo`）から。画面は CSS アニメーション、Launchpad は `SONG_PREVIEW_BLINK_MS` ごとに `previewLit` を反転して LED を再送
+- 解析結果は analyze.html の localStorage（`chord-analyzer:v2:<videoId>`）を読み、既定オプションで `decodeChords` する
 
 ### 色分けルール
 | 種別 | 画面CSS | Launchpad RGB |
 |------|---------|---------------|
 | ルート音 | `--root-color` (#ff4466) | [127, 0, 40] |
-| 転回ベース音（`showInversion`=true かつ `inversion`>0 時） | `.pad.bass` (#ffaa33) | [127, 80, 0] |
+| 転回ベース音（`showInversion`=true かつ `inversion`>0 時）/ 分数コードのベース（`chordOverride.bassPC`） | `.pad.bass` (#ffaa33) | [127, 80, 0] |
+| 次のコードのルート予告（`state.preview`） | `.pad.next-root`（点滅） | [40, 0, 12]（点滅） |
+| 次のコードの構成音予告 | `.pad.next-chord`（点滅） | [0, 30, 40]（点滅） |
 | コードトーン（`showChord`=true時） | `--chord-color` (#33ddff) | [0, 100, 127] |
 | スケール音（`showScale`=true時） | `--scale-color` (#44ff99) | [0, 127, 60] |
 | その他 | off (#000) | [0, 0, 0] |
@@ -135,6 +187,9 @@ const state = {
 | `SAMPLE_VOLUME` | `100` | サンプル再生のマスター音量（0〜127 MIDIスケール） |
 | `METRO_ACCENT` | `{ freq: 1200, vol: 0.35, decay: 0.055 }` | メトロノームアクセント拍（1拍目）音定数 |
 | `METRO_NORMAL` | `{ freq: 700, vol: 0.18, decay: 0.040 }` | メトロノーム通常拍（2〜4拍目）音定数 |
+| `CC_PLAY` / `CC_BACK` / `CC_FOLLOW` / `CC_LOOP` | `95` / `96` / `97` / `98` | 上段 Song ボタンの CC |
+| `SONG_BTN_COLORS` | `{ idle, playing, paused, back, follow, loopA, loopOn }` | 上段 Song ボタンの LED 色（下記「Song バー仕様」） |
+| `SONG_PREVIEW_BLINK_MS` | `150` | 次コード予告の Launchpad 点滅の半周期（ms）。画面側は CSS で 0.3 秒周期 |
 
 ---
 
@@ -201,8 +256,14 @@ const state = {
 | `buildPadData(baseNote)` | `constants.js` | 8x8パッドのデータ配列を生成 |
 | `buildGridDOM(onPadDown, onPadUp, onAfterRebuild)` | `grid.js` | 9x9 DOM要素を構築（上段CC + 右列 + 8x8） |
 | `updateAll()` | `main.js` | 画面更新 + Launchpad LED送信の中心関数 |
-| `getChordPitchClasses()` | `music.js` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音のPC（基本形時は `null`） |
-| `sendToLaunchpad(chordPCs, scalePCs, rootPC, bassPC)` | `led.js` | SysEx RGBメッセージをLaunchpadに送信（bassPC対応） |
+| `getChordPitchClasses()` | `music.js` | コードのピッチクラスを返す（`{ all, inverted, bassPC }`）。`bassPC` は転回ベース音 or 分数コードのベースのPC（無ければ `null`）。`chordOverride` を反映 |
+| `createPadClassifier({ ledPhase? })` | `music.js` | 現在の state から `pc → 'root' / 'bass' / 'chord' / 'scale' / 'next-root' / 'next-chord' / 'off'` を返す関数を作る（DOM・LED 共通） |
+| `sendToLaunchpad({ quiet? })` | `led.js` | 現在の state から全パッド + 上段の LED を SysEx で一括送信（`quiet` でログ抑制） |
+| `initSong({ onUpdate, onLEDs })` | `song.js` | Song バー初期化（YouTube・Songle / 解析結果・FOLLOW・カポ連動・CC 95-98・`?v=` 自動読込） |
+| `pauseFollow()` | `song.js` | 手動のコード操作時に FOLLOW を一時停止 |
+| `fetchSongle(videoId)` | `analyze/songle.js` | Songle から曲情報・コード・ビートを取得し `{ song, pageUrl, key, tempo, segments, timing }` を返す（未登録は `null`） |
+| `parseSongleChord(name)` | `analyze/songle.js` | Songle のコード名（`Eb` / `C#m7` / `Ebsus2/Ab` / `N`）を analyzer のセグメント形式に変換 |
+| `keyFromProfile(profile)` | `chord-analyzer/analyzer.js` | 12 次元ピッチクラス分布から Krumhansl-Kessler 相関でキーを推定 |
 | `initMIDI(callbacks)` | `midi.js` | MIDI初期化・デバイス列挙・コールバック注入の統合エントリ（`setupMIDIInput` を内部で呼ぶ） |
 | `rescanMIDI()` | `midi.js` | MIDI デバイス再スキャン（RESCAN ボタン用） |
 | `setupMIDIInput(access)` | `midi.js` | MIDI入力リスナー設定（CC/Note On/Off 振り分け） |
@@ -248,15 +309,17 @@ js/
   grid.js        グリッド DOM・カポ・オクターブ操作
   midi.js        MIDI デバイス管理・入力ハンドリング
   main.js        エントリーポイント・updateAll・メトロノーム・全体統合
+  song.js        Song バー（YouTube 再生 + コード進行で FOLLOW 点灯・カポ一本化・次コード予告・A-B ループ・CC 95-98）
   chord-analyzer/  オーディオ → コード進行解析（DOM 非依存、Worker / Node で動作）
     dsp.js         FFT・ダウンサンプル
     analyzer.js    extractFeatures（ビート同期クロマ。センターカット / HPSS / メロディ抑制の全組み合わせを事前計算）/ decodeChords（バリアント選択 + キー推定 + Viterbi）
     worker.js      extractFeatures を Worker で実行
-    capo.js        カポ位置でのコード表示名・構成音の C メジャースケール適合率・自動カポ選択（suggestCapo）
+    capo.js        カポ位置でのコード表示名・構成音の C メジャースケール適合率・自動カポ選択（suggestCapo）。セグメントの `bass`（分数コード）/ `symbol`・`intervals`（CHORD_TYPES に無い型）にも対応
   analyze/       YouTube 同期解析ページ（analyze.html）用
     youtube.js     IFrame Player API ラッパー・補間付き再生時刻
     capture.js     タブ音声キャプチャ（getDisplayMedia + AudioWorklet）
-    page.js        スキャン → 解析 → タイムライン同期表示
+    songle.js      Songle 公開 API（widget.songle.jp/api/v1、CORS 可）から登録済み曲のコード・ビートを取得し、analyzer と同じセグメント形式に変換
+    page.js        スキャン → 解析 → タイムライン同期表示。LOAD 時に解析キャッシュが無ければ Songle を自動取得（SONGLE ボタンで解析結果と切替）
 analyze.html / analyze.css  コード解析プロトタイプページ
 ```
 
@@ -271,6 +334,7 @@ music     → constants, state
 led       → constants, state, music, logger
 grid      → constants, state, logger
 midi      → constants, state, grid, logger
+song      → constants, state, logger, grid, led, analyze/youtube, analyze/songle, chord-analyzer/capo, chord-analyzer/analyzer
 main      → all
 ```
 
@@ -280,7 +344,7 @@ main      → all
 
 ## UI構成（三段組レイアウト）
 
-上段（全幅）: ヘッダー + MIDIステータス
+上段（全幅）: ヘッダー + MIDIステータス + **Song バー**（URL / LOAD / ソース選択 / ANALYZE ↗ / ▾ 折りたたみ。読込後に YouTube プレイヤー・NOW/NEXT・KEY/TEMPO・CAPO（AUTO）・▶ / ◄◄ / FOLLOW / A-B・タイムライン）
 
 ### 左パネル（MIDI / Audio / Debug）
 1. Device — デバイス選択 / RESCAN / SEND / CLEAR

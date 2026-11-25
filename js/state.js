@@ -18,6 +18,12 @@ export const state = {
   midiAccess: null,
   bpm: 120,
   metronome: false,
+  // --- Song（曲バー）連動 ---
+  follow: false,        // true の間は再生中の曲のコードで root / chordType を自動更新
+  chordOverride: null,  // FOLLOW 中のコード拡張情報 { intervals?, symbol?, bassPC?, none? }（none = N.C.）
+  scaleRoot: null,      // スケールの基準音。null = コードのルート、数値 = 曲のキー
+  preview: null,        // 次のコードの予告 { rootPC, pcs[] }（null = 予告なし）
+  previewLit: true,     // Launchpad 上の予告点滅の点灯フェーズ
 };
 
 export let pads = buildPadData(state.baseNote);

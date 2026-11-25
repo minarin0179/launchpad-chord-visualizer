@@ -148,8 +148,12 @@ export const CC_UP    = 91;  // Octave Up
 export const CC_DOWN  = 92;  // Octave Down
 export const CC_LEFT  = 93;  // Transpose -1
 export const CC_RIGHT = 94;  // Transpose +1
+export const CC_PLAY   = 95; // Song: 再生 / 一時停止
+export const CC_BACK   = 96; // Song: 1小節戻る
+export const CC_FOLLOW = 97; // Song: FOLLOW ON/OFF
+export const CC_LOOP   = 98; // Song: A-B ループ（A 設定 → B 設定 → 解除）
 
-export const TOP_ROW_LABELS  = ['OCT▲', 'OCT▼', '◄', '►', '', '', '', ''];
+export const TOP_ROW_LABELS  = ['OCT▲', 'OCT▼', '◄', '►', '▶', '◄◄', 'FLW', 'A-B'];
 
 export function buildPadData(baseNote) {
   const pads = [];
@@ -174,6 +178,8 @@ export const COLORS = {
   bass:    [127, 80, 0],
   off:     [0, 0, 0],
   pressed: [127, 127, 127],
+  'next-root':  [40, 0, 12],   // 次のコードの予告（ルート）
+  'next-chord': [0, 30, 40],   // 次のコードの予告（構成音）
 };
 
 // Logo LED color (RGB)
@@ -181,6 +187,17 @@ export const LOGO_GREEN       = [0, 100, 0];
 // Function button LED colors (RGB)
 export const FN_BTN_COLOR     = [60, 30, 0];  // 上段アクティブボタン（OCT/Capo）
 export const FN_BTN_OFF_COLOR = [3, 3, 3];    // 上段非アクティブボタン
+// 上段 Song ボタン（CC 95-98）の LED
+export const SONG_BTN_COLORS = {
+  idle:     [12, 12, 12],   // 曲未読込でも押せることを示す程度
+  playing:  [0, 100, 0],
+  paused:   [20, 60, 0],
+  back:     [60, 30, 0],
+  follow:   [0, 100, 127],
+  loopA:    [100, 100, 0],  // A 点のみ設定済み
+  loopOn:   [110, 0, 110],
+};
+export const SONG_PREVIEW_BLINK_MS = 150;  // 次コード予告の Launchpad 点滅周期（半周期）
 // Metronome logo flash colors (RGB)
 export const METRO_LOGO_ACCENT = [127, 127, 127];
 export const METRO_LOGO_NORMAL = [60, 80, 100];
