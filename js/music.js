@@ -47,20 +47,31 @@ export function classifyPad(pc, rootPC, chordAll, scalePCs, bassPC, showChord, s
 // 次のコードの予告は、今のコードで光っていないパッドにだけ重ねる。
 // ledPhase=true のときは state.previewLit（点滅の消灯フェーズ）も反映する
 // 練習モードで光らせる音（MIDI ノート番号 → 'root' / 'chord' / 'bass' の Map。色は音名ではなく音の高さごとの役割で決める）
-// ルートは基準パッド（PRACTICE_ANCHOR、デフォルト配置なら C3）から 1 オクターブ以内に置き、そこから基本形（転回なし）で
-// 構成音を積む（9th などはオクターブを超えたまま）。分数コードのベースはルートより下。
+// - 通常: ルートを基準パッド（PRACTICE_ANCHOR、デフォルト配置なら C3）から 1 オクターブ以内に置き、基本形で積む
+//   （9th などはオクターブを超えたまま）
+// - 分数コード: 転回形。ベースを同じ範囲に置き、残りの構成音をベースのすぐ上に密集して積む（C/E → E G C）
 // 同じ音が出るパッドは全部光らせる（どこで押さえるかは弾く人が選べる）。カポ・オクターブで範囲も動く（形は固定）
 function practiceNotes() {
   const ov = state.chordOverride;
   const rootPC = getRootPC();
   if (rootPC === null) return new Map();
   const anchor = state.baseNote + PRACTICE_ANCHOR.row * ROW_INTERVAL + PRACTICE_ANCHOR.col;
-  const root = anchor + (((rootPC - anchor) % 12) + 12) % 12;
+  const above = (pc, from) => from + ((((pc - from) % 12) + 12) % 12);  // from 以上で最も近い pc の音
   const intervals = ov?.intervals ?? CHORD_TYPES[state.chordType].intervals;
-  const notes = new Map(intervals.map(i => [root + i, i === 0 ? 'root' : 'chord']));
+  const roleOf = (i) => (i === 0 ? 'root' : 'chord');
   const bassPC = ov?.bassPC;
-  if (bassPC != null && bassPC !== rootPC) notes.set(root - ((((root - bassPC) % 12) + 12) % 12), 'bass');
-  return notes;
+
+  if (bassPC != null && bassPC !== rootPC) {
+    const bass = above(bassPC, anchor);
+    const notes = new Map([[bass, 'bass']]);
+    for (const i of intervals) {
+      const pc = (rootPC + i) % 12;
+      if (pc !== bassPC) notes.set(above(pc, bass + 1), roleOf(i));
+    }
+    return notes;
+  }
+  const root = above(rootPC, anchor);
+  return new Map(intervals.map(i => [root + i, roleOf(i)]));
 }
 
 // classify(pc, pad?) — 練習モードは pad を渡したときだけ位置で絞り込む

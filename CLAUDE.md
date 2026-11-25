@@ -114,7 +114,7 @@ const state = {
 | ピアプロ | `piapro.jp/t/<id>`（`/<日付>` 付きも可） | 同上（mp3 モード。音源は Songle 経由の試聴 mp3） |
 | SoundCloud | `soundcloud.com/<user>/<track>` | SoundCloud Widget API（`https://w.soundcloud.com/player/api.js`）。Songle 経由の音源 URL は SoundCloud の廃止 API を指していて 401 になるため |
 
-- どちらも `{ kind, getTime() 秒, isPlaying(), play(), pause(), seek(秒), destroy() }` に揃える。Songle の `position` は補間済み、SoundCloud は `PLAY_PROGRESS` の報告を `performance.now()` で補間
+- どちらも `{ kind, getTime() 秒, isPlaying(), play(), pause(), seek(秒), setVolume(0〜100), destroy() }` に揃える。音量は左パネルの SONG スライダー（`#song-volume`、localStorage `launchpad-chord-visualizer:song-volume`）で、生成時と変更時に反映（Songle は `widget.volume`、SoundCloud は `setVolume`）。Songle の `position` は補間済み、SoundCloud は `PLAY_PROGRESS` の報告を `performance.now()` で補間
 - Songle Widget は `div#songle-widget`（id 固定）を widgets.js が拾う仕組みなので、同時に 1 つだけ。曲を替えるときは `destroy()`（`widget.remove()`）してから作り直す
 - URL の形でない入力は Songle のキーワード検索（`https://widget.songle.jp/api/v1/songs/search.json?q=`、最大 40 件・該当なしは 404）。結果のうち対応メディアのものを候補リスト（`#song-results`）に出し、クリックで読み込み
 - 読込後の URL: YouTube は `?v=<動画ID>`、それ以外は `?url=<URL>`。どちらも起動時に自動読込
@@ -128,10 +128,10 @@ const state = {
 
 #### PRACTICE（練習モード）
 - 光る電子ピアノのように、弾くコードだけを点灯（ルート / コードトーン / 分数コードのベース）。スケール・次コードの予告は消灯、N.C. は全消灯
-- 点灯は **基本形（転回なし）のボイシング 1 つ**（`music.js` の `practiceNotes`）
+- 点灯は **ボイシング 1 つ**（`music.js` の `practiceNotes`）。通常は基本形、分数コードは転回形
   - ルートは基準パッド `PRACTICE_ANCHOR`（下から 3 段目・左から 3 列目、デフォルト配置で C3）から 1 オクターブ以内（C3〜B3）
   - 構成音はルートから `intervals` をそのまま積む（ルートが最低音。9th などはオクターブを超えた高さ）
-  - 分数コードのベースはルートより下の最も近い音
+  - **分数コードは転回形**: ベース（最低音）を同じ範囲（C3〜B3）に置き、残りの構成音をベースのすぐ上に密集して積む（C/E → E3 G3 C4、F/G → G3 A3 C4 F4）
   - **同じ音（MIDI ノート番号）が出るパッドは全部光らせる**（押さえる位置は弾く人が選ぶ）
   - 色は音名ではなく音の高さごとの役割（例: C/G の G2 は bass、G3 は chord）
   - カポ・オクターブで範囲も一緒に動く（形は固定）
@@ -386,7 +386,7 @@ main      → all
 
 ### 左パネル（MIDI / Audio / Debug）
 1. Device — デバイス選択 / RESCAN / SEND / CLEAR
-2. Volume — ボリュームスライダー
+2. Volume — INST（楽器音、`#volume`）/ SONG（曲プレイヤー、`#song-volume`）の 2 本
 3. Metronome — BPMスライダー + 数値入力 + START/STOPボタン
 4. Sound — 音色選択（22種 / `#instrument-buttons`）+ ロード状況表示（`#sound-status`）。ロード中のボタンは `.loading` で点滅
 5. Log — イベントログ

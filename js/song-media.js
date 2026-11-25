@@ -3,7 +3,7 @@
 //   YouTube / ニコニコ動画 / ピアプロ → Songle の埋め込みプレイヤー（Songle Widget API）
 //   SoundCloud → SoundCloud Widget API（Songle 経由の音源 URL は SoundCloud の廃止 API を指していて再生できない）
 // どちらも同じインターフェースのプレイヤーにする:
-//   { kind, getTime() 秒, isPlaying(), play(), pause(), seek(秒), destroy() }
+//   { kind, getTime() 秒, isPlaying(), play(), pause(), seek(秒), setVolume(0〜100), destroy() }
 // =====================
 import { parseVideoId } from './analyze/youtube.js';
 
@@ -59,7 +59,7 @@ function loadScript(src) {
 // position は Songle 側で補間済み（ms）
 let _songleSeq = 0;
 
-async function createSongle(container, media, { onStateChange }) {
+async function createSongle(container, media, { onStateChange, volume }) {
   await loadScript('https://widget.songle.jp/v1/api.js');
   const width = Math.max(200, Math.round(container.clientWidth || 480));
   const api = `launchpad-song-${++_songleSeq}`;
@@ -69,6 +69,7 @@ async function createSongle(container, media, { onStateChange }) {
       url: media.songleUrl,
       songAutoPlay: false,
       songAutoLoop: false,
+      songVolume: volume,
       songleWidgetSizeW: width,
       videoPlayerSizeW: width,
       videoPlayerSizeH: Math.round(width * 9 / 16),
@@ -81,6 +82,7 @@ async function createSongle(container, media, { onStateChange }) {
           play: () => widget.play(),
           pause: () => widget.pause(),
           seek: (sec) => widget.seekTo(Math.round(Math.max(0, sec) * 1000)),
+          setVolume: (v) => { widget.volume = v; },
           destroy: () => { try { widget.remove(); } catch { /* 既に消えている */ } container.replaceChildren(); },
         });
       },
@@ -124,6 +126,7 @@ async function createSoundCloud(container, media, { onStateChange }) {
     play: () => widget.play(),
     pause: () => widget.pause(),
     seek: (sec) => { const ms = Math.round(Math.max(0, sec) * 1000); report(ms); widget.seekTo(ms); },
+    setVolume: (v) => widget.setVolume(v),
     destroy: () => { Object.values(E).forEach(ev => widget.unbind(ev)); container.replaceChildren(); },
   };
 }
@@ -173,10 +176,12 @@ function smoothTime(player) {
 }
 
 // container の中身を作り直してプレイヤーを生成
-export async function createMediaPlayer(container, media, { onStateChange } = {}) {
+// volume は 0〜100
+export async function createMediaPlayer(container, media, { onStateChange, volume = 50 } = {}) {
   container.replaceChildren();
   const player = media.kind === 'soundcloud'
     ? await createSoundCloud(container, media, { onStateChange })
-    : await createSongle(container, media, { onStateChange });
+    : await createSongle(container, media, { onStateChange, volume });
+  player.setVolume(volume);
   return smoothTime(player);
 }

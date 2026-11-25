@@ -65,6 +65,30 @@ function songTime() {
   return song.player ? song.player.getTime() + (current()?.offset ?? 0) : 0;
 }
 
+// 曲プレイヤーの音量（左パネルの SONG スライダー、0〜100。localStorage に保存）
+const SONG_VOLUME_KEY = 'launchpad-chord-visualizer:song-volume';
+
+function songVolume() {
+  return Number($('song-volume').value);
+}
+
+function initSongVolume() {
+  const slider = $('song-volume');
+  try {
+    const saved = localStorage.getItem(SONG_VOLUME_KEY);
+    if (saved !== null) slider.value = saved;
+  } catch { /* localStorage 不可 */ }
+  const apply = () => {
+    $('song-volume-label').textContent = `${slider.value}%`;
+    song.player?.setVolume(songVolume());
+  };
+  slider.oninput = () => {
+    apply();
+    try { localStorage.setItem(SONG_VOLUME_KEY, slider.value); } catch { /* localStorage 不可 */ }
+  };
+  apply();
+}
+
 function beatSec() {
   const tempo = current()?.tempo;
   return tempo > 0 ? 60 / tempo : FALLBACK_BEAT_SEC;
@@ -153,7 +177,7 @@ async function loadSong() {
   selectSource(analysis?.preferred ? 'analysis' : 'songle');
 
   try {
-    const player = await createMediaPlayer($('song-player'), media, { onStateChange: onPlayerState });
+    const player = await createMediaPlayer($('song-player'), media, { onStateChange: onPlayerState, volume: songVolume() });
     if (seq !== song.loadSeq) { player.destroy(); return; }
     song.player = player;
     song.activeIdx = -2;
@@ -505,6 +529,7 @@ export function initSong({ onUpdate, onLEDs }) {
   setExtraTopRowHandler(handleTopRow);
   setTopRowColorProvider(topRowColor);
 
+  initSongVolume();
   $('song-load').onclick = loadSong;
   $('song-url').onkeydown = (e) => { if (e.key === 'Enter') loadSong(); };
   $('song-source').onchange = (e) => selectSource(e.target.value);

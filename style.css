@@ -416,6 +416,8 @@ header p {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
+.volume-k { width: 3em; font-size: 0.55rem; letter-spacing: 0.12em; color: var(--text-muted); }
+.volume-row + .volume-row { margin-top: 6px; }
 .volume-row input[type="range"] {
   width: 100px;
   accent-color: var(--accent);
