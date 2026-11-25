@@ -1,8 +1,9 @@
 // ES Modules: 全 import はファイル先頭にまとめる
 import { NOTE_NAMES, CHORD_TYPES, SCALES, INSTRUMENTS, INVERSION_LABELS,
          CLICK_PAD_VELOCITY, BPM_MIN, BPM_MAX, BPM_DEFAULT,
-         LOGO_FLASH_MS, METRO_LOGO_ACCENT, METRO_LOGO_NORMAL, LOGO_GREEN } from './constants.js';
-import { state, pads } from './state.js';
+         LOGO_FLASH_MS, METRO_LOGO_ACCENT, METRO_LOGO_NORMAL, LOGO_GREEN,
+         MAX_BASE_NOTE_CAPO, buildPadData } from './constants.js';
+import { state, pads, setPads } from './state.js';
 import { log } from './logger.js';
 import { startNote, stopNote, getActiveNotes, playMetronomeClick,
          selectInstrument, getAudioCtx } from './audio.js';
@@ -10,9 +11,10 @@ import { setSamplerStatusCallback, getSampleDestination } from './sampler.js';
 import { createPadClassifier, detectChordFromActiveNotes, getChordDisplayData } from './music.js';
 import { sendToLaunchpad, flashPressedPad, updateLogoLED, sendLogoLED, clearAllLEDs } from './led.js';
 import { buildGridDOM, handleTopRowPress, handleRightColPress,
-         shiftCapo, padEls } from './grid.js';
-import { initMIDI, onDeviceSelect, rescanMIDI, rebuildPadMap } from './midi.js';
+         shiftCapo, padEls, updateCapoDisplay, updateBaseNoteDisplay } from './grid.js';
+import { initMIDI, onDeviceSelectByUser, rescanMIDI, rebuildPadMap } from './midi.js';
 import { initSong, pauseFollow } from './song.js';
+import { loadSettings, saveSettings } from './settings.js';
 
 // メトロノーム内部状態（公開 state に含めない）
 let _metroTimer = null;
@@ -96,7 +98,74 @@ function updateAll({ quiet = false } = {}) {
   }
 
   sendToLaunchpad({ quiet });
+  persistSettings();
 }
+
+// =====================
+// Settings（localStorage に保存してリロード後に復元）
+// =====================
+// トグル: [ボタンID, state キー, OFF で隠す要素ID]
+const TOGGLES = [
+  ['toggle-chord',     'showChord',     ['chord-control']],
+  ['toggle-scale',     'showScale',     ['scale-control', 'scale-key-label']],
+  ['toggle-inversion', 'showInversion', ['inversion-control']],
+];
+
+function applyToggleDOM(toggleId, stateKey, controlIds) {
+  document.getElementById(toggleId).classList.toggle('active', state[stateKey]);
+  controlIds.forEach(id => document.getElementById(id).classList.toggle('hidden', !state[stateKey]));
+}
+
+function setVolumeDOM(v) {
+  document.getElementById('volume').value = v;
+  document.getElementById('volume-label').textContent = v + '%';
+}
+
+function setBpmDOM(v) {
+  document.getElementById('metro-bpm').value = v;
+  document.getElementById('metro-bpm-num').value = v;
+}
+
+// ボタン群・グリッドを作る前に state と DOM へ反映する
+function restoreSettings() {
+  const s = loadSettings();
+  const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+  if (isInt(s.root, 0, 11)) state.root = s.root;
+  if (typeof s.chordType === 'string' && CHORD_TYPES[s.chordType]) state.chordType = s.chordType;
+  if (isInt(s.inversion, 0, CHORD_TYPES[state.chordType].intervals.length - 1)) state.inversion = s.inversion;
+  if (typeof s.scale === 'string' && SCALES[s.scale]) state.scale = s.scale;
+  if (typeof s.instrument === 'string' && INSTRUMENTS[s.instrument]) state.instrument = s.instrument;
+  for (const [id, key, controls] of TOGGLES) {
+    if (typeof s[key] === 'boolean') state[key] = s[key];
+    applyToggleDOM(id, key, controls);
+  }
+  if (isInt(s.baseNote, 0, MAX_BASE_NOTE_CAPO) && Number.isInteger(s.capo)) {
+    state.baseNote = s.baseNote;
+    state.capo = s.capo;
+    setPads(buildPadData(state.baseNote));
+  }
+  if (isInt(s.volume, 0, 100)) setVolumeDOM(s.volume);
+  if (isInt(s.bpm, BPM_MIN, BPM_MAX)) { state.bpm = s.bpm; setBpmDOM(s.bpm); }
+}
+
+// FOLLOW 中の root / chordType / inversion は曲が決めた値なので保存しない（最後に手で選んだ値を残す）
+function persistSettings() {
+  const s = {
+    scale: state.scale,
+    instrument: state.instrument,
+    showChord: state.showChord,
+    showScale: state.showScale,
+    showInversion: state.showInversion,
+    baseNote: state.baseNote,
+    capo: state.capo,
+    volume: parseInt(document.getElementById('volume').value),
+    bpm: state.bpm,
+  };
+  if (!state.follow) Object.assign(s, { root: state.root, chordType: state.chordType, inversion: state.inversion });
+  saveSettings(s);
+}
+
+restoreSettings();
 
 // =====================
 // Metronome
@@ -162,21 +231,21 @@ function buildButtonGroup(containerId, items, activeKey, onClick) {
 buildButtonGroup(
   'root-buttons',
   NOTE_NAMES.map((name, i) => ({ key: i, label: name })),
-  0,
+  state.root,
   (i) => { pauseFollow(); state.root = i; state.inversion = 0; updateAll(); }
 );
 
 buildButtonGroup(
   'chord-buttons',
   Object.entries(CHORD_TYPES).map(([key, val]) => ({ key, label: val.label })),
-  'maj',
+  state.chordType,
   (key) => { pauseFollow(); state.chordType = key; state.inversion = 0; updateAll(); }
 );
 
 buildButtonGroup(
   'scale-buttons',
   Object.entries(SCALES).map(([key, val]) => ({ key, label: val.label })),
-  'major',
+  state.scale,
   (key) => { state.scale = key; updateAll(); }
 );
 
@@ -184,7 +253,7 @@ buildButtonGroup(
   'instrument-buttons',
   Object.entries(INSTRUMENTS).map(([key, val]) => ({ key, label: val.label })),
   state.instrument,
-  (key) => selectInstrument(key)
+  (key) => { selectInstrument(key); persistSettings(); }
 );
 
 // =====================
@@ -213,17 +282,13 @@ selectInstrument(state.instrument);
 // =====================
 // DOM: Toggles
 // =====================
-function setupToggle(toggleId, stateKey, controlIds) {
-  document.getElementById(toggleId).onclick = function() {
+for (const [toggleId, stateKey, controlIds] of TOGGLES) {
+  document.getElementById(toggleId).onclick = () => {
     state[stateKey] = !state[stateKey];
-    this.classList.toggle('active', state[stateKey]);
-    controlIds.forEach(id => document.getElementById(id).classList.toggle('hidden', !state[stateKey]));
+    applyToggleDOM(toggleId, stateKey, controlIds);
     updateAll();
   };
 }
-setupToggle('toggle-chord',     'showChord',     ['chord-control']);
-setupToggle('toggle-scale',     'showScale',     ['scale-control', 'scale-key-label']);
-setupToggle('toggle-inversion', 'showInversion', ['inversion-control']);
 
 // =====================
 // DOM: Capo controls
@@ -239,12 +304,14 @@ document.getElementById('volume').oninput = function() {
   document.getElementById('volume-label').textContent = this.value + '%';
   const ctx = getAudioCtx();
   if (ctx) getSampleDestination(ctx).gain.value = getVolume();
+  persistSettings();
 };
 
 document.getElementById('metro-bpm').oninput = function() {
   state.bpm = parseInt(this.value);
   document.getElementById('metro-bpm-num').value = this.value;
   if (state.metronome) startMetronome();
+  persistSettings();
 };
 
 document.getElementById('metro-bpm-num').onchange = function() {
@@ -253,6 +320,7 @@ document.getElementById('metro-bpm-num').onchange = function() {
   state.bpm = v;
   document.getElementById('metro-bpm').value = v;
   if (state.metronome) startMetronome();
+  persistSettings();
 };
 
 document.getElementById('metro-btn').onclick = () => {
@@ -278,7 +346,7 @@ document.getElementById('rescan-btn').onclick = async () => {
   }
 };
 
-document.getElementById('device-select').onchange = onDeviceSelect;
+document.getElementById('device-select').onchange = onDeviceSelectByUser;
 
 // =====================
 // Build grid + Init MIDI + Start
@@ -296,6 +364,8 @@ buildGridDOM(
   },
   () => { rebuildPadMap(); updateAll(); }  // onAfterRebuild (rebuildPads 後に呼ばれる)
 );
+updateCapoDisplay();       // 復元したカポ・オクターブを表示に反映
+updateBaseNoteDisplay();
 
 initMIDI({
   onUpdateAll:     updateAll,

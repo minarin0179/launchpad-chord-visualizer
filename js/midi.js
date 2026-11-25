@@ -3,6 +3,7 @@ import { PROGRAMMER_MODE_DELAY_MS, FN_ACTIVE_DURATION_MS, RIGHT_COL_NOTE_DURATIO
 import { state, pads } from './state.js';
 import { padEls, topRowEls, rightColEls } from './grid.js';
 import { log } from './logger.js';
+import { loadDeviceName, saveDeviceName } from './settings.js';
 import { LaunchpadX, fromWebMIDI, TOP_ROW_CCS, RIGHT_COL_NOTES } from '../packages/launchpad-x/dist/index.js';
 
 // =====================
@@ -62,7 +63,10 @@ export function populateDevices(access) {
   const hintEl   = document.getElementById('midi-hint');
   const prev = sel.value;
   sel.innerHTML = '<option value="">-- Select device --</option>';
-  let autoSelected = false;
+  // 前回ユーザーが選んだデバイス名（'' = 未選択を選んだので自動接続しない）
+  const savedName = loadDeviceName();
+  let autoSelected = savedName === '';
+  let savedId = null;
   let outputCount = 0;
   const deviceNames = [];
 
@@ -74,10 +78,15 @@ export function populateDevices(access) {
     sel.appendChild(opt);
     deviceNames.push(output.name);
     outputCount++;
+    if (savedName && savedId === null && output.name === savedName) savedId = id;
     if (!autoSelected && output.name.toLowerCase().includes('launchpad')) {
       sel.value = id;
       autoSelected = true;
     }
+  }
+  if (savedId !== null) {
+    sel.value = savedId;  // 前回のデバイスを最優先で再接続
+    autoSelected = true;
   }
 
   if (!autoSelected && prev) {
@@ -152,6 +161,14 @@ function _findMatchingInput(access, output) {
   // フォールバック: 最初の接続済み入力
   log(`入力マッチ(フォールバック): "${connected[0].name}"`, 'out');
   return connected[0];
+}
+
+// デバイス選択欄をユーザーが操作したとき: 選んだポート名を覚えて次回から自動接続する
+export function onDeviceSelectByUser() {
+  const id = document.getElementById('device-select').value;
+  const output = id ? state.midiAccess?.outputs.get(id) : null;
+  saveDeviceName(output?.name ?? '');
+  onDeviceSelect();
 }
 
 export function onDeviceSelect() {

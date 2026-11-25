@@ -173,6 +173,7 @@ async function loadSong() {
   }
   const by = ` — ${songle.song.title} / ${songle.song.artist.name || '?'}`;
   song.sources.songle = { ...songle, label: `Songle${by}`, offset: 0 };
+  addRecent(media, songle.song);
   const analysis = media.kind === 'youtube' ? loadAnalysisCache(media.id) : null;
   if (analysis) song.sources.analysis = analysis;
   renderSourceSelect();
@@ -205,15 +206,21 @@ async function searchSongs(query) {
     return;
   }
   if (seq !== song.loadSeq) return;
-  const list = $('song-results');
-  list.replaceChildren();
   const playable = results.map(r => ({ ...r, media: parseMediaUrl(r.permalink) })).filter(r => r.media);
   if (!playable.length) {
     hideResults();
     setStatus(`No songs found on Songle for "${query}"`, 'error');
     return;
   }
-  for (const r of playable) {
+  renderResults(playable.map(r => ({ ...r, meta: `${r.artist} · ${formatSec(r.duration)}` })));
+  setStatus(`${playable.length} songs found — pick one`, 'ok');
+}
+
+// 候補リスト（検索結果・履歴共通）。items: { media, title, meta, onRemove? }
+function renderResults(items) {
+  const list = $('song-results');
+  list.replaceChildren();
+  for (const r of items) {
     const li = document.createElement('li');
     const kind = document.createElement('span');
     kind.className = `song-result-kind ${r.media.kind}`;
@@ -223,8 +230,16 @@ async function searchSongs(query) {
     title.textContent = r.title;
     const meta = document.createElement('span');
     meta.className = 'song-result-meta';
-    meta.textContent = `${r.artist} · ${formatSec(r.duration)}`;
+    meta.textContent = r.meta;
     li.append(kind, title, meta);
+    if (r.onRemove) {
+      const rm = document.createElement('button');
+      rm.className = 'song-result-remove';
+      rm.textContent = '×';
+      rm.title = 'Remove from history';
+      rm.onclick = (e) => { e.stopPropagation(); r.onRemove(); };
+      li.appendChild(rm);
+    }
     li.onclick = () => {
       $('song-url').value = mediaPageUrl(r.media);
       loadSong();
@@ -232,7 +247,57 @@ async function searchSongs(query) {
     list.appendChild(li);
   }
   list.hidden = false;
-  setStatus(`${playable.length} songs found — pick one`, 'ok');
+}
+
+// =====================
+// 最近読み込んだ曲（localStorage、新しい順に最大 RECENT_MAX 件）
+// =====================
+const RECENT_KEY = 'launchpad-chord-visualizer:recent-songs';
+const RECENT_MAX = 10;
+
+function loadRecent() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY));
+    return Array.isArray(list) ? list.filter(r => r && typeof r.url === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(list) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch { /* 保存不可 */ }
+}
+
+function addRecent(media, songInfo) {
+  const url = mediaPageUrl(media);
+  const entry = { url, title: songInfo.title, artist: songInfo.artist?.name ?? '', at: Date.now() };
+  saveRecent([entry, ...loadRecent().filter(r => r.url !== url)]);
+}
+
+function showRecent() {
+  const recent = loadRecent()
+    .map(r => ({ ...r, media: parseMediaUrl(r.url) }))
+    .filter(r => r.media);
+  if (!recent.length) {
+    hideResults();
+    setStatus('No recent songs yet', '');
+    return;
+  }
+  renderResults(recent.map(r => ({
+    media: r.media,
+    title: r.title || r.url,
+    meta: r.artist,
+    onRemove: () => {
+      saveRecent(loadRecent().filter(x => x.url !== r.url));
+      showRecent();
+    },
+  })));
+  setStatus('Recent songs — pick one', 'ok');
+}
+
+function toggleRecent() {
+  if (!$('song-results').hidden && $('song-status').textContent.startsWith('Recent')) hideResults();
+  else showRecent();
 }
 
 function hideResults() {
@@ -592,6 +657,8 @@ export function initSong({ onUpdate, onLEDs }) {
   initSongVolume();
   initOverviewSeek();
   $('song-load').onclick = loadSong;
+  $('song-recent').onclick = toggleRecent;
+  $('song-url').onfocus = () => { if (!$('song-url').value.trim() && $('song-results').hidden) showRecent(); };
   $('song-url').onkeydown = (e) => { if (e.key === 'Enter') loadSong(); };
   $('song-source').onchange = (e) => selectSource(e.target.value);
   $('song-follow').onclick = () => setFollow(!state.follow);

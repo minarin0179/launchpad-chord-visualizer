@@ -633,6 +633,18 @@ body {
 .song-result-kind.soundcloud { color: #ff8833; }
 .song-result-kind.piapro { color: #33ddff; }
 .song-result-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-result-remove {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.song-result-remove:hover { color: var(--root-color); }
 .song-result-meta { flex: none; color: var(--text-muted); font-size: 0.6rem; }
 
 .song-body { display: flex; flex-direction: column; gap: 10px; }

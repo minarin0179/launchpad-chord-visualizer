@@ -94,6 +94,18 @@ const state = {
 };
 ```
 
+### 設定の保存・復元（`js/settings.js`）
+| localStorage キー | 内容 |
+|------|------|
+| `launchpad-chord-visualizer:settings` | `{ root, chordType, inversion, scale, instrument, showChord, showScale, showInversion, baseNote, capo, volume, bpm }` |
+| `launchpad-chord-visualizer:device` | 最後にユーザーが選んだ MIDI 出力ポート名（`''` = 「未選択」を選んだ） |
+| `launchpad-chord-visualizer:song-volume` | Song プレイヤーの音量（`song.js`） |
+| `launchpad-chord-visualizer:recent-songs` | 最近読み込んだ曲 `[{ url, title, artist, at }]`（新しい順・最大 10 件、`song.js`）。Songle の取得に成功した時点で追加（同じ URL は先頭へ移動）。RECENT ボタン / 空の入力欄にフォーカスで一覧、× で削除 |
+
+- `main.js` の `restoreSettings()` がボタン群・グリッド生成前に state と DOM へ反映し、`persistSettings()` を `updateAll()`・音量・BPM・音色変更時に呼ぶ（書き込みは 300ms まとめ）
+- FOLLOW 中の root / chordType / inversion は保存しない（最後に手で選んだ値を残す）
+- デバイス: `populateDevices` は 保存したポート名 → 名前に `launchpad` を含むポート → 直前の選択 の順で自動選択。保存名が `''` なら自動接続しない。USB 抜き差しも `onstatechange` → `populateDevices` で自動再接続。保存はユーザーが選択欄を操作したとき（`onDeviceSelectByUser`）だけ
+
 ### Song バー仕様
 
 #### コード進行のソース
@@ -347,6 +359,7 @@ js/
   midi.js        MIDI デバイス管理・入力ハンドリング
   main.js        エントリーポイント・updateAll・メトロノーム・全体統合
   song.js        Song バー（Songle 検索・曲の再生 + コード進行で FOLLOW 点灯・カポ一本化・次コード予告・A-B ループ・CC 95-98）
+  settings.js    設定・前回の MIDI デバイス名の保存 / 復元（localStorage）
   song-media.js  Song バーの再生メディア（YouTube / ニコニコ / ピアプロ = Songle 埋め込みプレイヤー、SoundCloud = Widget API）・URL 判定
   chord-analyzer/  オーディオ → コード進行解析（DOM 非依存、Worker / Node で動作）
     dsp.js         FFT・ダウンサンプル
@@ -371,7 +384,7 @@ audio     → constants, state, sampler
 music     → constants, state
 led       → constants, state, music, logger
 grid      → constants, state, logger
-midi      → constants, state, grid, logger
+midi      → constants, state, grid, logger, settings
 song-media → analyze/youtube
 song      → constants, state, logger, grid, led, song-media, analyze/songle, chord-analyzer/capo, chord-analyzer/analyzer
 main      → all
