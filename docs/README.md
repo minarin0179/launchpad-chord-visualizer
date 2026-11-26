@@ -85,7 +85,7 @@ YouTube の曲のコード進行を、音声から推定するプロトタイプ
 - **SCAN**: YouTube を最大 2 倍速で再生しながらタブ音声をキャプチャして解析（共有ダイアログで「このタブ」と「タブの音声を共有」を選ぶ）
 - **AUDIO FILE**: 手元の音源ファイルを解析
 - **SONGLE**: Songle に登録済みなら、そのコード進行を表示（解析結果と切替。解析結果が無ければ LOAD 時に自動取得）
-- Decode / Separation の設定で再スキャンせずに結果を調整できる。解析結果は動画ごとにブラウザ（localStorage）に保存され、メイン画面の Song バーからも使える
+- Decode / Separation の設定で再スキャンせずに結果を調整できる。解析結果と設定は動画ごとにブラウザ（localStorage）に保存され、メイン画面の Song バーでも同じ設定のコード進行が使える
 
 ### 設定の保存
 
@@ -125,16 +125,20 @@ YouTube の曲のコード進行を、音声から推定するプロトタイプ
 
 ## ローカルで動かす
 
-ES Modules は `file://` では動作しないため、ローカルサーバーが必要。
+Node.js 22 以上が必要。
 
 ```bash
-# Python
-python -m http.server 8080
-
-# Node.js
-npx serve .
+npm ci
+npm run dev
 ```
 
-VS Code の Live Preview 拡張機能でも起動できる。ただし Song バーと解析ページは動画の埋め込みやタブ音声のキャプチャを使うため、通常の Chrome で開くこと。
+`http://localhost:5173/` を **Chrome** で開く（Song バーと解析ページは動画の埋め込みやタブ音声のキャプチャを使うため、VS Code 内蔵のプレビューではなく通常の Chrome で開くこと）。ファイルを保存すると自動で再読み込みされる。
 
-更新後にボタンが反応しないなど挙動が古いままのときは、ブラウザが古い JS をキャッシュしている。`Ctrl+Shift+R` で強制再読み込みする。
+| コマンド | 内容 |
+|----------|------|
+| `npm run dev` | 開発サーバー |
+| `npm run check` | lint + 型チェック + テスト |
+| `npm run build` | 公開用のファイルを `dist/` に出力 |
+| `npm run preview` | `dist/` の内容を `http://localhost:4173/` で確認 |
+
+実装の詳細は [CLAUDE.md](../CLAUDE.md) を参照。

@@ -14,7 +14,7 @@ import {
   PROGRAMMER_MODE_SYSEX,
 } from '../helpers/fake-midi.ts';
 
-const html = readFileSync(resolve(import.meta.dirname, '../../next.html'), 'utf8');
+const html = readFileSync(resolve(import.meta.dirname, '../../index.html'), 'utf8');
 const output = new FakeMidiOutput('out-1', 'Launchpad X LPX MIDI Out');
 const input = new FakeMidiInput('in-1', 'Launchpad X LPX MIDI In');
 const access = new FakeMidiAccess();

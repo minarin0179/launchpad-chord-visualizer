@@ -16,15 +16,7 @@ const layer = (files, patterns, message) => ({
 
 export default tseslint.config(
   {
-    ignores: [
-      'dist/**',
-      'node_modules/**',
-      'packages/**',
-      'tests/golden/**',
-      // リライト前の旧アプリ（切り替え時に削除する）
-      'js/**',
-      'scripts/**',
-    ],
+    ignores: ['dist/**', 'node_modules/**', 'packages/**', 'tests/golden/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -122,12 +114,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ['*.config.{ts,js}'],
+    files: ['*.config.{ts,js}', 'scripts/**'],
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['**/*.js'],
+    // 型情報なしで lint するファイル（設定ファイル・Node のスクリプト）
+    files: ['**/*.{js,mjs}'],
     extends: [tseslint.configs.disableTypeChecked],
+    rules: { '@typescript-eslint/no-magic-numbers': 'off' },
   },
   prettier,
 );

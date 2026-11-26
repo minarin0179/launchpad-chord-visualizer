@@ -4,7 +4,12 @@ import { chordOf, makeChord, type ChordSpec } from '../../src/core/chord.ts';
 import type { Segment } from '../../src/core/segments.ts';
 import { isChordTypeKey } from '../../src/core/theory.ts';
 
-/** リライト前のコードから採取した出力（scripts/capture-golden.mjs が生成）を読む */
+/**
+ * tests/golden/*.json を読む。
+ * TypeScript へのリライト前の実装（旧 js/）の出力を採取したもので、挙動が変わっていないことの基準にする。
+ * 採取スクリプトは旧実装と一緒に削除済みなので、ここにあるデータは再生成できない（意図して挙動を変えるときは、
+ * テスト側に変更理由を書いて期待値を上書きする）。
+ */
 export function loadGolden<T>(name: string): T {
   // happy-dom 環境では URL がブラウザ版に差し替わるので、パスで解決する
   return JSON.parse(

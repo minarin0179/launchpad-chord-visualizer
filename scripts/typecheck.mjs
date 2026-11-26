@@ -12,7 +12,9 @@ const PROJECTS = [
 
 function check(project) {
   return new Promise((resolve) => {
-    const child = spawn('npx', ['tsc', '-p', project, '--pretty'], { shell: process.platform === 'win32' });
+    const child = spawn('npx', ['tsc', '-p', project, '--pretty'], {
+      shell: process.platform === 'win32',
+    });
     let output = '';
     child.stdout.on('data', (chunk) => (output += chunk));
     child.stderr.on('data', (chunk) => (output += chunk));

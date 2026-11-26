@@ -1,0 +1,3 @@
+# 改行は LF に統一する（Windows / WSL / コンテナのどこでチェックアウトしても同じ内容になるように）
+* text=auto eol=lf
+*.png binary

@@ -1,15 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const fromRoot = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
-/**
- * ビルド対象のページ。
- * リライト中は旧アプリ (index.html / analyze.html) と新アプリ (next*.html) が並存するので、
- * 存在する新アプリのページだけをビルドする。切り替え後は index.html / analyze.html になる。
- */
-const PAGES = ['next.html', 'next-analyze.html'].filter((page) => existsSync(fromRoot(page)));
+/** ビルド対象のページ（メイン画面と解析ページ） */
+const PAGES = ['index.html', 'analyze.html'];
 
 /**
  * 作業フォルダが Windows のドライブを 9p でマウントしたもの（WSL2 / Dev Container）かどうか。
@@ -22,7 +18,7 @@ function isOn9pMount(): boolean {
       .split('\n')
       .some((line) => {
         const [, mountPoint, type] = line.split(' ');
-        return type === '9p' && mountPoint !== undefined && root.startsWith(mountPoint);
+        return type === '9p' && root.startsWith(mountPoint);
       });
   } catch {
     return false;
@@ -57,5 +53,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    // 統合テストはアプリ全体を読み込む。ファイルシステムが遅い環境（9p マウント）でも時間切れにならないようにする
+    hookTimeout: 60_000,
   },
 });

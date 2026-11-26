@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Features } from '../../src/analyzer/types.ts';
 import { loadGolden } from '../helpers/golden.ts';
 
-const html = readFileSync(resolve(import.meta.dirname, '../../next-analyze.html'), 'utf8');
+const html = readFileSync(resolve(import.meta.dirname, '../../analyze.html'), 'utf8');
 const VIDEO_ID = 'dQw4w9WgXcQ';
 const features = loadGolden<{ name: string; features: Features }[]>('analyzer').find(
   (c) => c.name === 'stereo-44100',

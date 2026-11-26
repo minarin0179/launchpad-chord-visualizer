@@ -4,14 +4,9 @@
   --bg: #0a0a0f;
   --surface: #12121a;
   --border: #1e1e2e;
-  --root-color: #ff4466;
-  --chord-color: #33ddff;
-  --scale-color: #44ff99;
-  --bass-color: #ffaa33;
-  --next-root-color: #7a1a30;
-  --next-chord-color: #155a6a;
-  --preview-blink: 0.3s;
-  --playhead-ratio: 25%;
+  /* パッドの役割の色（--root-color / --chord-color / --scale-color / --bass-color / --next-root-color /
+     --next-chord-color）と --preview-blink / --playhead-ratio は、起動時に src/ui/theme.ts が設定する。
+     値の定義は src/config/roles.ts・timing.ts・timeline.ts にあり、Launchpad の LED 色と並べて管理している */
   --text: #e0e0f0;
   --text-muted: #555577;
   --accent: #ff4466;
