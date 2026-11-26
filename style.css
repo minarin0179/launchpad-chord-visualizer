@@ -7,6 +7,11 @@
   --root-color: #ff4466;
   --chord-color: #33ddff;
   --scale-color: #44ff99;
+  --bass-color: #ffaa33;
+  --next-root-color: #7a1a30;
+  --next-chord-color: #155a6a;
+  --preview-blink: 0.3s;
+  --playhead-ratio: 25%;
   --text: #e0e0f0;
   --text-muted: #555577;
   --accent: #ff4466;
@@ -122,8 +127,8 @@ header p {
   border-color: var(--scale-color);
 }
 #inversion-row .btn.active {
-  background: #ffaa33;
-  border-color: #ffaa33;
+  background: var(--bass-color);
+  border-color: var(--bass-color);
 }
 
 /* Sound: 音色ボタン（22音色あるのでコンパクトに詰める） */
@@ -177,7 +182,7 @@ header p {
 .toggle-btn.active { color: var(--text); border-color: currentColor; }
 .toggle-btn.t-chord.active { color: var(--chord-color); }
 .toggle-btn.t-scale.active { color: var(--scale-color); }
-.toggle-btn.t-inversion.active { color: #ffaa33; }
+.toggle-btn.t-inversion.active { color: var(--bass-color); }
 
 /* Inversion selector */
 #inversion-row { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -197,8 +202,8 @@ header p {
   transition: color 0.15s, border-color 0.15s;
 }
 #capo-display[data-nonzero="true"] {
-  color: #ffaa33;
-  border-color: #ffaa33;
+  color: var(--bass-color);
+  border-color: var(--bass-color);
 }
 
 /* Grid wrapper */
@@ -261,8 +266,8 @@ header p {
 }
 .pad.chord::after { color: rgba(0,0,0,0.5); }
 .pad.bass {
-  background: #ffaa33;
-  box-shadow: 0 0 10px #ffaa33;
+  background: var(--bass-color);
+  box-shadow: 0 0 10px var(--bass-color);
 }
 .pad.bass::after { color: rgba(0,0,0,0.5); }
 .pad.scale {
@@ -726,7 +731,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 25%;
+  left: var(--playhead-ratio);
   width: 2px;
   background: var(--root-color);
   pointer-events: none;
@@ -775,5 +780,5 @@ body {
 
 /* Next-chord preview (blinks on screen; Launchpad blinks via js/song.js) */
 @keyframes pad-preview { 50% { opacity: 0.25; } }
-.pad.next-root  { background: #7a1a30; animation: pad-preview 0.3s steps(1) infinite; }
-.pad.next-chord { background: #155a6a; animation: pad-preview 0.3s steps(1) infinite; }
+.pad.next-root  { background: var(--next-root-color); animation: pad-preview var(--preview-blink) steps(1) infinite; }
+.pad.next-chord { background: var(--next-chord-color); animation: pad-preview var(--preview-blink) steps(1) infinite; }

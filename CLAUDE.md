@@ -2,6 +2,14 @@
 
 > ユーザー向けの概要・起動方法・使い方は README.md を参照。
 
+> **リライト中（ブランチ `refactor/typescript-rewrite`）**
+> TypeScript + Vite への全面リライトを進めている。**新実装は `src/`**、旧実装は `js/`（切り替え時に削除）。
+> - 新アプリ: `npm run dev` → `/next.html`・`/next-analyze.html`（旧アプリは `/index.html`・`/analyze.html` のまま並べて比較できる）
+> - 検証: `npm run check`（lint + 型チェック + テスト）、`npm run build`
+> - `tests/golden/*.json` は旧実装の出力を採取したもの（`scripts/capture-golden.mjs`）。新実装はこれと一致することをテストしている
+> - **この文書の以下の内容は旧実装（`js/`）の説明**。挙動の仕様としては引き続き有効だが、ファイル名・関数名・state の形は `src/` と一致しない。切り替え時に書き直す
+> - 切り替え（`index.html` を `src/` に向けて `js/` を削除）は、実機（Launchpad）と曲の再生での確認が済んでから行う
+
 ---
 
 ## Launchpad X MIDI仕様（Programmerモード）
