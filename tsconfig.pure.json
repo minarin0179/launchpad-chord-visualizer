@@ -1,0 +1,10 @@
+{
+  // 純粋層: DOM lib を外してコンパイルすることで、DOM / Web API に依存していないことを保証する
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/core", "src/config", "src/store", "src/analyzer"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.worker.ts", "src/**/*.worklet.ts"]
+}

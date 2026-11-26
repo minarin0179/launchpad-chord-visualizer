@@ -29,11 +29,14 @@ export { Layout, VelocityCurve, AftertouchType, AftertouchThreshold, FaderOrient
 // Platform adapters
 export { fromWebMIDI, fromNodeMidi } from './adapters.js';
 export type { NodeMIDIOutput, NodeMIDIInput } from './adapters.js';
+export type { TopRowButton } from './constants.js';
 
 // Pad layout constants and helpers (useful for app code)
 export {
   SYSEX_HEADER,
+  GRID_SIZE,
   LOGO_PAD,
+  TOP_ROW_CC,
   TOP_ROW_CCS,
   RIGHT_COL_CCS,
   RIGHT_COL_NOTES,

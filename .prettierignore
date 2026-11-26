@@ -1,0 +1,5 @@
+dist
+node_modules
+packages/launchpad-x/dist
+tests/golden
+js

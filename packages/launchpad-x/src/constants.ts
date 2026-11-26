@@ -83,11 +83,32 @@ export const PROGRAMMER_MODE_VALUE = 0x01;
 // Pad layout — Programmer mode
 // ============================================================
 
+/** Number of rows / columns in the main pad grid */
+export const GRID_SIZE = 8;
+
 /** Logo button pad number (LED only, no MIDI input) */
 export const LOGO_PAD = 99;
 
 /** Top-row CC numbers, left to right (CC 91–98) */
 export const TOP_ROW_CCS = [91, 92, 93, 94, 95, 96, 97, 98] as const;
+
+/**
+ * Top-row buttons by the name printed on the hardware.
+ * The values are the CC numbers sent in Programmer mode.
+ */
+export const TOP_ROW_CC = {
+  up:          91,
+  down:        92,
+  left:        93,
+  right:       94,
+  session:     95,
+  note:        96,
+  custom:      97,
+  captureMidi: 98,
+} as const;
+
+/** Name of a top-row button (key of TOP_ROW_CC) */
+export type TopRowButton = keyof typeof TOP_ROW_CC;
 
 /** Right-column CC numbers, top to bottom (CC 89, 79, …, 19) */
 export const RIGHT_COL_CCS = [89, 79, 69, 59, 49, 39, 29, 19] as const;
@@ -101,9 +122,9 @@ export const RIGHT_COL_NOTES = RIGHT_COL_CCS;
 /** All grid pad numbers (11–88, row*10+col, 1-indexed) */
 export const GRID_PAD_NUMBERS: readonly number[] = (() => {
   const nums: number[] = [];
-  for (let row = 1; row <= 8; row++) {
-    for (let col = 1; col <= 8; col++) {
-      nums.push(row * 10 + col);
+  for (let row = 1; row <= GRID_SIZE; row++) {
+    for (let col = 1; col <= GRID_SIZE; col++) {
+      nums.push(padNumber(row, col));
     }
   }
   return nums;
@@ -126,7 +147,7 @@ export function padNumber(row: number, col: number): number {
 export function isGridPad(pad: number): boolean {
   const row = Math.floor(pad / 10);
   const col = pad % 10;
-  return row >= 1 && row <= 8 && col >= 1 && col <= 8;
+  return row >= 1 && row <= GRID_SIZE && col >= 1 && col <= GRID_SIZE;
 }
 
 /** Returns true if `cc` is a top-row CC number (91–98). */

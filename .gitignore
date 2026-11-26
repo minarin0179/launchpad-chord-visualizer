@@ -1,9 +1,11 @@
 # Dependencies
 node_modules/
-package-lock.json
 
-# TypeScript build output
+# Build output
+dist/
 packages/launchpad-x/dist/
+coverage/
+*.tsbuildinfo
 
 # OS
 .DS_Store

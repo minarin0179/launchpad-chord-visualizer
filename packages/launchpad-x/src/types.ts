@@ -12,49 +12,55 @@ export type PaletteIndex = number;
 // ============================================================
 // Layout selection (SysEx command 0x00)
 // ============================================================
-export const enum Layout {
-  Session     = 0x00, // DAW mode only
-  NoteMode    = 0x01,
-  CustomMode1 = 0x04, // Drum Rack
-  CustomMode2 = 0x05, // Keys
-  CustomMode3 = 0x06, // Lighting Drum Rack
-  CustomMode4 = 0x07, // Lighting Session
-  DAWFaders   = 0x0D, // DAW mode only
-  Programmer  = 0x7F,
-}
+export const Layout = {
+  Session:     0x00, // DAW mode only
+  NoteMode:    0x01,
+  CustomMode1: 0x04, // Drum Rack
+  CustomMode2: 0x05, // Keys
+  CustomMode3: 0x06, // Lighting Drum Rack
+  CustomMode4: 0x07, // Lighting Session
+  DAWFaders:   0x0D, // DAW mode only
+  Programmer:  0x7F,
+} as const;
+export type Layout = (typeof Layout)[keyof typeof Layout];
 
 // ============================================================
 // Configuration enums
 // ============================================================
-export const enum VelocityCurve {
-  Low    = 0,
-  Medium = 1,
-  High   = 2,
-  Fixed  = 3,
-}
+export const VelocityCurve = {
+  Low:    0,
+  Medium: 1,
+  High:   2,
+  Fixed:  3,
+} as const;
+export type VelocityCurve = (typeof VelocityCurve)[keyof typeof VelocityCurve];
 
-export const enum AftertouchType {
-  Polyphonic = 0,
-  Channel    = 1,
-  Off        = 2,
-}
+export const AftertouchType = {
+  Polyphonic: 0,
+  Channel:    1,
+  Off:        2,
+} as const;
+export type AftertouchType = (typeof AftertouchType)[keyof typeof AftertouchType];
 
-export const enum AftertouchThreshold {
-  Low    = 0,
-  Medium = 1,
-  High   = 2,
-}
+export const AftertouchThreshold = {
+  Low:    0,
+  Medium: 1,
+  High:   2,
+} as const;
+export type AftertouchThreshold = (typeof AftertouchThreshold)[keyof typeof AftertouchThreshold];
 
-export const enum FaderOrientation {
-  Vertical   = 0,
-  Horizontal = 1,
-}
+export const FaderOrientation = {
+  Vertical:   0,
+  Horizontal: 1,
+} as const;
+export type FaderOrientation = (typeof FaderOrientation)[keyof typeof FaderOrientation];
 
-export const enum DrumRackMode {
-  NoteMode             = 0,
-  SimpleDrumRack       = 1,
-  IntelligentDrumRack  = 2,
-}
+export const DrumRackMode = {
+  NoteMode:             0,
+  SimpleDrumRack:       1,
+  IntelligentDrumRack:  2,
+} as const;
+export type DrumRackMode = (typeof DrumRackMode)[keyof typeof DrumRackMode];
 
 // ============================================================
 // LED update descriptor (for sendLEDs batch API)

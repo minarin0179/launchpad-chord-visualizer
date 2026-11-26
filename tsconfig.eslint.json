@@ -1,0 +1,10 @@
+{
+  // ESLint の型情報用（プロジェクトを 1 つにまとめて読み込みを速くする）
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "tests", "vite.config.ts"],
+  "exclude": ["src/**/*.worker.ts", "src/**/*.worklet.ts"]
+}

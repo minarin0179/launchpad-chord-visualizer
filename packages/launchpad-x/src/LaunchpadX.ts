@@ -4,7 +4,7 @@
 
 import type {
   MIDIOutputPort, MIDIInputPort,
-  RGB, PaletteIndex, LEDUpdate,
+  PaletteIndex, LEDUpdate,
   ScrollTextOptions, FaderConfig, FaderOrientation, DeviceInfo,
   Layout, VelocityCurve, AftertouchType, AftertouchThreshold, DrumRackMode,
   NoteOnDetail, NoteOffDetail, CCDetail, SysExDetail,

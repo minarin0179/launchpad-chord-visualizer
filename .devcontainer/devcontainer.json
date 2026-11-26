@@ -1,7 +1,11 @@
 {
   "name": "Launchpad Chord Visualizer Dev",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
-  "postCreateCommand": "cd packages/launchpad-x && npm install && npm run build",
+  // node_modules はコンテナ側のボリュームに置く（Windows のフォルダを 9p でマウントした上では読み込みが遅い）
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "postCreateCommand": "sudo chown node:node node_modules && npm ci",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -13,5 +17,5 @@
       }
     }
   },
-  "forwardPorts": []
+  "forwardPorts": [5173]
 }

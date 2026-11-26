@@ -23,18 +23,31 @@ function wrapWebMIDIOutput(output: MIDIOutput): MIDIOutputPort {
 
 /**
  * Wrap a Web MIDI API MIDIInput into MIDIInputPort.
- * Uses the `onmidimessage` property of MIDIInput.
+ *
+ * Uses `addEventListener('midimessage')` so several wrappers can share one
+ * port without clobbering each other (the `onmidimessage` property is a
+ * single slot). Unlike assigning `onmidimessage`, `addEventListener` does not
+ * open the port implicitly, so the port is opened explicitly.
  */
 function wrapWebMIDIInput(input: MIDIInput): MIDIInputPort {
   const handlers = new Set<(data: Uint8Array) => void>();
-  input.onmidimessage = (event: MIDIMessageEvent) => {
-    if (event.data) for (const h of handlers) h(event.data);
+  const listener = (event: Event): void => {
+    const data = (event as MIDIMessageEvent).data;
+    if (data) for (const h of handlers) h(data);
   };
   return {
-    addMessageListener(handler) { handlers.add(handler); },
+    addMessageListener(handler) {
+      if (handlers.size === 0) {
+        input.addEventListener('midimessage', listener);
+        // open() rejects when the port has been unplugged; the caller learns
+        // about that through MIDIAccess.onstatechange, so it is safe to ignore.
+        void input.open().catch(() => undefined);
+      }
+      handlers.add(handler);
+    },
     removeMessageListener(handler) {
       handlers.delete(handler);
-      if (handlers.size === 0) input.onmidimessage = null;
+      if (handlers.size === 0) input.removeEventListener('midimessage', listener);
     },
   };
 }
