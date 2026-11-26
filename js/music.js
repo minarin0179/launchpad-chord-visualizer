@@ -51,15 +51,11 @@ export function classifyPad(pc, rootPC, chordAll, scalePCs, bassPC, showChord, s
 //   （9th などはオクターブを超えたまま）
 // - 分数コード: 転回形。ベースを同じ範囲に置き、残りの構成音をベースのすぐ上に密集して積む（C/E → E G C）
 // 同じ音が出るパッドは全部光らせる（どこで押さえるかは弾く人が選べる）。カポ・オクターブで範囲も動く（形は固定）
-function practiceNotes() {
-  const ov = state.chordOverride;
-  const rootPC = getRootPC();
+function practiceNotes(rootPC, intervals, bassPC) {
   if (rootPC === null) return new Map();
   const anchor = state.baseNote + PRACTICE_ANCHOR.row * ROW_INTERVAL + PRACTICE_ANCHOR.col;
   const above = (pc, from) => from + ((((pc - from) % 12) + 12) % 12);  // from 以上で最も近い pc の音
-  const intervals = ov?.intervals ?? CHORD_TYPES[state.chordType].intervals;
   const roleOf = (i) => (i === 0 ? 'root' : 'chord');
-  const bassPC = ov?.bassPC;
 
   if (bassPC != null && bassPC !== rootPC) {
     const bass = above(bassPC, anchor);
@@ -74,6 +70,13 @@ function practiceNotes() {
   return new Map(intervals.map(i => [root + i, roleOf(i)]));
 }
 
+// 今のコード（state）の練習用ボイシング
+function currentPracticeNotes() {
+  const ov = state.chordOverride;
+  return practiceNotes(getRootPC(), ov?.intervals ?? CHORD_TYPES[state.chordType].intervals, ov?.bassPC);
+}
+
+
 // classify(pc, pad?) — 練習モードは pad を渡したときだけ位置で絞り込む
 export function createPadClassifier({ ledPhase = false } = {}) {
   const chord = getChordPitchClasses();
@@ -84,9 +87,17 @@ export function createPadClassifier({ ledPhase = false } = {}) {
   const showChord = state.showChord || state.practice;
   const showScale = state.showScale && !state.practice;
   const showPreview = p && showChord && (!ledPhase || state.previewLit);
-  const practice = state.practice ? practiceNotes() : null;
+  const practice = state.practice ? currentPracticeNotes() : null;
+  // 練習モードの予告: 次のコードも練習用ボイシングで、今のコードが光っていないパッドに点滅で重ねる
+  const practiceNext = practice && showPreview && p.intervals
+    ? practiceNotes(p.rootPC, p.intervals, p.bassPC) : null;
   return (pc, pad) => {
-    if (practice && pad) return practice.get(pad.semitone) ?? 'off';
+    if (practice && pad) {
+      const role = practice.get(pad.semitone);
+      if (role) return role;
+      const next = practiceNext?.get(pad.semitone);
+      return next ? (next === 'root' ? 'next-root' : 'next-chord') : 'off';
+    }
     const cls = classifyPad(pc, rootPC, chord.all, scalePCs, chord.bassPC, showChord, showScale);
     if (!showPreview || cls === 'root' || cls === 'bass' || cls === 'chord') return cls;
     if (pc === p.rootPC) return 'next-root';

@@ -89,7 +89,7 @@ const state = {
   practice: false,     // 練習モード（弾くコードだけ点灯。FOLLOW OFF で自動 OFF）
   chordOverride: null, // { intervals?, symbol?, bassPC?, none? } — CHORD_TYPES に無い構成音・分数コードのベース・N.C.
   scaleRoot: null,     // スケール基準音（null = コードのルート、FOLLOW 中は曲のキー）
-  preview: null,       // 次のコード予告 { rootPC, pcs[] }
+  preview: null,       // 次のコード予告 { rootPC, pcs[], intervals, bassPC }
   previewLit: true,    // 予告の LED 点滅フェーズ
 };
 ```
@@ -139,7 +139,8 @@ const state = {
 - 次コードの予告: FOLLOW 中・再生中のみ、次のセグメントがコードあり かつ 今と別のコードで、開始まで 1 拍（`60 / tempo`、不明時 0.5 秒）以内のとき。今のコードで root / chord / bass として光っていないパッドにだけ重ねる
 
 #### PRACTICE（練習モード）
-- 光る電子ピアノのように、弾くコードだけを点灯（ルート / コードトーン / 分数コードのベース）。スケール・次コードの予告は消灯、N.C. は全消灯
+- 光る電子ピアノのように、弾くコードだけを点灯（ルート / コードトーン / 分数コードのベース）。スケールは消灯、N.C. は全消灯
+- 次コードの予告も練習用ボイシングで出す（`practiceNotes(rootPC, intervals, bassPC)` を次のコードにも適用し、今のコードが光っていないパッドに `next-root` / `next-chord` で点滅。共通音は今のコードの色のまま）。開始は前倒しした切り替えの 1 拍前（`next.start − (t + PRACTICE_LEAD_BEATS 拍)` ≤ 1 拍）
 - 点灯は **ボイシング 1 つ**（`music.js` の `practiceNotes`）。通常は基本形、分数コードは転回形
   - ルートは基準パッド `PRACTICE_ANCHOR`（下から 3 段目・左から 3 列目、デフォルト配置で C3）から 1 オクターブ以内（C3〜B3）
   - 構成音はルートから `intervals` をそのまま積む（ルートが最低音。9th などはオクターブを超えた高さ）

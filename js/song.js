@@ -358,7 +358,6 @@ function setFollow(on, { update = true } = {}) {
 function setPractice(on) {
   if (on && !current()) return;
   state.practice = on;
-  if (on) setPreview(null);
   if (on && !state.follow) setFollow(true, { update: false });
   song.activeIdx = -2;
   $('song-practice').classList.toggle('active', on);
@@ -401,7 +400,7 @@ function setPreview(seg) {
   const intervals = seg.intervals ?? CHORD_TYPES[seg.type].intervals;
   const pcs = intervals.map(iv => (seg.root + iv) % 12);
   if (seg.bass != null) pcs.push(seg.bass);
-  state.preview = { rootPC: seg.root, pcs };
+  state.preview = { rootPC: seg.root, pcs, intervals, bassPC: seg.bass ?? null };
   song.previewTimer = setInterval(() => {
     state.previewLit = !state.previewLit;
     _onLEDs();
@@ -624,7 +623,8 @@ function tick() {
 
   const { segments } = src;
   // 練習モードは少し先のコードを光らせて、切り替わりに手が間に合うようにする
-  const idx = findSegmentIndex(segments, state.practice ? t + PRACTICE_LEAD_BEATS * beatSec() : t);
+  const tLit = state.practice ? t + PRACTICE_LEAD_BEATS * beatSec() : t;
+  const idx = findSegmentIndex(segments, tLit);
   let changed = false;
   if (idx !== song.activeIdx) {
     song.blockEls[song.activeIdx]?.classList.remove('active');
@@ -634,10 +634,10 @@ function tick() {
   }
   renderNow(segments, idx, t);
 
-  // 次のコードが 1 拍以内に来るなら予告（再生中のみ）
+  // 次のコードが 1 拍以内に来るなら予告（再生中のみ。練習モードは前倒しした切り替えの 1 拍前から）
   const next = segments[idx + 1];
-  const until = next ? next.start - t : Infinity;
-  const showPreview = state.follow && !state.practice && isPlaying() && next?.root != null
+  const until = next ? next.start - tLit : Infinity;
+  const showPreview = state.follow && isPlaying() && next?.root != null
     && until > 0 && until <= beatSec() && next.label !== segments[idx]?.label;
   if (setPreview(showPreview ? next : null)) changed = true;
 
